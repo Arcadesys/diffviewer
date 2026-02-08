@@ -1,0 +1,11 @@
+{
+  "id": "revision-buddy",
+  "name": "Revision Buddy",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Review Session JSON from Revision Buddy Custom GPT; apply patches and copy revised text.",
+  "author": "Austen",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": false
+}

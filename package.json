@@ -1,0 +1,25 @@
+{
+  "name": "revision-buddy",
+  "version": "0.1.0",
+  "description": "Obsidian plugin: Revision Buddy review panel with paste Session JSON and Copy text.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "esbuild main.ts --bundle --outfile=main.js --external:obsidian --format=cjs --platform=node --target=es2020 --watch",
+    "build": "esbuild main.ts --bundle --outfile=main.js --external:obsidian --format=cjs --platform=node --target=es2020"
+  },
+  "keywords": ["obsidian-plugin", "revision-buddy"],
+  "author": "Austen",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "^1.5.8",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
