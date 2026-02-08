@@ -1,0 +1,80 @@
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580191781,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770580191789,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770580191792,"hypothesisId":"H2,H4"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"cold boot.md","searchTextLen":126,"hasPath":true},"timestamp":1770580213816,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:beforeOpenFile","message":"calling openFile","data":{"path":"cold boot.md"},"timestamp":1770580213816,"hypothesisId":"H5"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580338951,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"","initialTextLen":0},"timestamp":1770580338951,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":false},"timestamp":1770580338951,"hypothesisId":"H2,H4"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":126,"hasPath":false},"timestamp":1770580375952,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":126,"hasPath":false},"timestamp":1770580376462,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":126,"hasPath":false},"timestamp":1770580376625,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":126,"hasPath":false},"timestamp":1770580376858,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580378123,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580378330,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580378551,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580379062,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580379301,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":158,"hasPath":false},"timestamp":1770580379504,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":190,"hasPath":false},"timestamp":1770580381032,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":190,"hasPath":false},"timestamp":1770580381365,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":66,"hasPath":false},"timestamp":1770580395967,"hypothesisId":"H5"}
+{"location":"main.ts:jumpToInSource:entry","message":"jumpToInSource called","data":{"path":"","searchTextLen":55,"hasPath":false},"timestamp":1770580465494,"hypothesisId":"H5"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580693983,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770580694045,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770580694054,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580894055,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770580894135,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770580894142,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580985631,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770580985698,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770580985672,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":false},"timestamp":1770580995061,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770580995059,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"","initialTextLen":0},"timestamp":1770580995061,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581092805,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581092850,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581092868,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581125043,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581125073,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581125088,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581311559,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581311619,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581311622,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581313468,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581313474,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581313476,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581315500,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581315508,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581315512,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581322481,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581322492,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581322490,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581324517,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581324523,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581324524,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581326487,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581326494,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581326495,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581381107,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581381150,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581381171,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581390953,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581390959,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581390963,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581433108,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581433128,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581433129,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581439559,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581439569,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581439572,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581440908,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581440909,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581440910,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581455256,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"cold boot.md","initialTextLen":18937},"timestamp":1770581455326,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770581455335,"hypothesisId":"H2,H4"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770581660473,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"","initialTextLen":0},"timestamp":1770581660475,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":false},"timestamp":1770581660475,"hypothesisId":"H2,H4"}
+{"location":"main.ts:activateView:entry","message":"activateView called","data":{"leavesCount":1,"hasRightLeaf":true,"hasGetLeaf":"function"},"timestamp":1770581680552,"hypothesisId":"H1,H3"}

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import type { Session, Finding, Summary, DocComment, FindingMeta, PersistedSessionState } from "../types";
 import { applyPatch } from "../patchApply";
 
+/* Low-vision friendly: larger base sizes, 1.5 line-height, higher contrast (avoid muted for body text). */
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
@@ -11,7 +12,8 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     backgroundColor: "var(--background-primary)",
     color: "var(--text-normal)",
-    fontSize: "var(--font-ui-large, 1.05rem)",
+    fontSize: "max(1.0625rem, var(--font-ui-large))",
+    lineHeight: 1.5,
   },
   toolbar: {
     display: "flex",
@@ -32,28 +34,30 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
   },
   item: {
-    padding: "8px 10px",
+    padding: "10px 12px",
     backgroundColor: "var(--background-secondary)",
     borderRadius: "4px",
     cursor: "pointer",
     border: "1px solid var(--background-modifier-border)",
   },
   itemExpanded: {
-    padding: "10px",
+    padding: "12px",
     display: "flex",
     flexDirection: "column",
     gap: "8px",
   },
   comment: {
-    fontSize: "var(--font-ui-large, 1.05rem)",
+    fontSize: "max(1.0625rem, var(--font-ui-large))",
     color: "var(--text-normal)",
+    lineHeight: 1.5,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
   preview: {
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
     fontFamily: "var(--font-monospace-theme, var(--font-monospace, monospace))",
-    color: "var(--text-muted)",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
     padding: "8px",
     backgroundColor: "var(--background-primary-alt)",
     borderRadius: "4px",
@@ -68,11 +72,11 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   btn: {
-    padding: "6px 12px",
+    padding: "8px 14px",
     border: "none",
     borderRadius: "4px",
     cursor: "pointer",
-    fontSize: "var(--font-ui-small)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
   },
   btnAccept: {
     backgroundColor: "var(--interactive-accent)",
@@ -105,23 +109,28 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "auto",
     border: "1px solid var(--background-modifier-border)",
     boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
   },
   toast: {
     padding: "8px",
     backgroundColor: "var(--background-modifier-error)",
     color: "var(--text-on-accent)",
     borderRadius: "4px",
-    fontSize: "var(--font-ui-small)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
   },
   attachedLabel: {
-    fontSize: "var(--font-ui-small)",
-    color: "var(--text-muted)",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
     marginBottom: "4px",
   },
   attachedSnippet: {
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
     fontFamily: "var(--font-monospace-theme, var(--font-monospace, monospace))",
     color: "var(--text-normal)",
+    lineHeight: 1.5,
     padding: "8px",
     backgroundColor: "var(--background-primary-alt)",
     borderRadius: "4px",
@@ -148,18 +157,22 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
   },
   summaryHeader: {
-    padding: "8px 10px",
+    padding: "10px 12px",
     backgroundColor: "var(--background-secondary)",
     cursor: "pointer",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
     fontWeight: 600,
+    lineHeight: 1.5,
   },
   summaryBody: {
-    padding: "10px 12px",
+    padding: "12px 14px",
     display: "flex",
     flexDirection: "column",
     gap: "8px",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
+    maxHeight: "320px",
+    overflowY: "auto",
   },
   summaryParagraph: {
     margin: 0,
@@ -171,8 +184,9 @@ const styles: Record<string, React.CSSProperties> = {
     paddingLeft: "18px",
   },
   summaryListTitle: {
-    fontSize: "var(--font-ui-smaller)",
-    color: "var(--text-muted)",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
     marginTop: "4px",
     marginBottom: "2px",
   },
@@ -182,45 +196,60 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
   },
   docCommentsHeader: {
-    padding: "8px 10px",
+    padding: "10px 12px",
     backgroundColor: "var(--background-secondary)",
     cursor: "pointer",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
     fontWeight: 600,
+    lineHeight: 1.5,
   },
   docCommentsBody: {
-    padding: "8px",
+    padding: "10px",
     display: "flex",
     flexDirection: "column",
     gap: "8px",
+    maxHeight: "400px",
+    overflowY: "auto",
   },
   docCommentItem: {
-    padding: "8px 10px",
+    padding: "10px 12px",
     backgroundColor: "var(--background-primary-alt)",
     borderRadius: "4px",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
+    maxHeight: "220px",
+    overflowY: "auto",
+  },
+  docCommentItemExpanded: {
+    maxHeight: "none",
+    minHeight: "120px",
+    borderLeft: "3px solid var(--interactive-accent)",
+    backgroundColor: "var(--background-secondary)",
   },
   docCommentAgent: {
-    fontSize: "var(--font-ui-small)",
-    color: "var(--text-muted)",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
     marginBottom: "4px",
   },
   docCommentSeverity: {
-    fontSize: "var(--font-ui-smaller)",
+    fontSize: "max(0.875rem, var(--font-ui-small))",
     marginLeft: "8px",
   },
   severityImportant: { color: "var(--text-error)" },
   severitySuggestion: { color: "var(--text-accent)" },
   metaLabel: {
-    fontSize: "var(--font-ui-smaller)",
-    color: "var(--text-muted)",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
     marginTop: "6px",
     marginBottom: "2px",
   },
   suggestionsList: {
     margin: 0,
     paddingLeft: "18px",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
   },
 };
 
@@ -238,6 +267,7 @@ export interface RevisionBuddyObsidianUIProps {
   onExportText?: (text: string) => void;
   onToast?: (message: string) => void;
   onJumpToInSource?: (searchText: string, fallbackSearchText?: string) => void;
+  onHighlightInSource?: (span: string | null) => void;
 }
 
 function computeCurrentText(initialText: string, session: Session, acceptedIndices: Set<number>): string {
@@ -287,6 +317,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     onExportText,
     onToast,
     onJumpToInSource,
+    onHighlightInSource,
   } = props;
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(() => new Set(initialAcceptedIndices ?? []));
   const [ignoredIndices, setIgnoredIndices] = useState<Set<number>>(() => new Set(initialIgnoredIndices ?? []));
@@ -295,6 +326,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   const [docCommentsCollapsed, setDocCommentsCollapsed] = useState(false);
+  const [expandedDocCommentIndex, setExpandedDocCommentIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (onPersistState) {
@@ -437,56 +469,65 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
           </div>
           {!docCommentsCollapsed && (
             <div style={styles.docCommentsBody}>
-              {doc_comments.map((dc, i) => (
-                <div
-                  key={i}
-                  style={{
-                    ...styles.docCommentItem,
-                    ...(onJumpToInSource && dc.anchor_quote ? { cursor: "pointer" } : {}),
-                  }}
-                  onClick={
-                    onJumpToInSource && dc.anchor_quote
-                      ? (e) => {
-                          e.preventDefault();
-                          onJumpToInSource(dc.anchor_quote!);
-                        }
-                      : undefined
+              {doc_comments.map((dc, i) => {
+                const isExpanded = expandedDocCommentIndex === i;
+                const handleClick = () => {
+                  if (isExpanded) {
+                    setExpandedDocCommentIndex(null);
+                    onHighlightInSource?.(null);
+                  } else {
+                    setExpandedDocCommentIndex(i);
+                    if (dc.anchor_quote) {
+                      onJumpToInSource?.(dc.anchor_quote);
+                      onHighlightInSource?.(dc.anchor_quote);
+                    } else {
+                      onHighlightInSource?.(null);
+                    }
                   }
-                  role={onJumpToInSource && dc.anchor_quote ? "button" : undefined}
-                  tabIndex={onJumpToInSource && dc.anchor_quote ? 0 : undefined}
-                  onKeyDown={
-                    onJumpToInSource && dc.anchor_quote
-                      ? (e) => e.key === "Enter" && onJumpToInSource(dc.anchor_quote!)
-                      : undefined
-                  }
-                >
-                  <div style={styles.docCommentAgent}>
-                    {dc.agent_id ?? "Agent"}
-                    {dc.severity && (
-                      <span
-                        style={{
-                          ...styles.docCommentSeverity,
-                          ...(dc.severity === "important" ? styles.severityImportant : styles.severitySuggestion),
-                        }}
-                      >
-                        {dc.severity}
-                      </span>
-                    )}
-                  </div>
-                  {dc.comment && <div style={styles.comment}>{dc.comment}</div>}
-                  {dc.rationale && (
-                    <div style={{ ...styles.metaLabel, marginTop: "4px" }}>{dc.rationale}</div>
-                  )}
-                  {dc.confidence && (
-                    <div style={styles.metaLabel}>Confidence: {dc.confidence}</div>
-                  )}
-                  {onJumpToInSource && dc.anchor_quote && (
-                    <div style={{ ...styles.metaLabel, marginTop: "6px", color: "var(--interactive-accent)" }}>
-                      Click to go to in document
+                };
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      ...styles.docCommentItem,
+                      ...(isExpanded ? styles.docCommentItemExpanded : {}),
+                      cursor: "pointer",
+                    }}
+                    onClick={handleClick}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && handleClick()}
+                  >
+                    <div style={styles.docCommentAgent}>
+                      {dc.agent_id ?? "Agent"}
+                      {dc.severity && (
+                        <span
+                          style={{
+                            ...styles.docCommentSeverity,
+                            ...(dc.severity === "important" ? styles.severityImportant : styles.severitySuggestion),
+                          }}
+                        >
+                          {dc.severity}
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {dc.comment && <div style={styles.comment}>{dc.comment}</div>}
+                    {dc.rationale && (
+                      <div style={{ ...styles.metaLabel, marginTop: "4px" }}>{dc.rationale}</div>
+                    )}
+                    {dc.confidence && (
+                      <div style={styles.metaLabel}>Confidence: {dc.confidence}</div>
+                    )}
+                    <div style={{ ...styles.metaLabel, marginTop: "6px", color: "var(--interactive-accent)" }}>
+                      {isExpanded
+                        ? "Click to collapse"
+                        : dc.anchor_quote
+                          ? "Click to expand and go to in document"
+                          : "Click to expand"}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -514,11 +555,11 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
                   <span style={styles.comment}>{label}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "var(--font-ui-smaller)", color: "var(--text-muted)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "max(0.9375rem, var(--font-ui-small))", color: "var(--text-normal)", lineHeight: 1.5 }}>
                     {onJumpToInSource && (finding.patch.span ?? finding.patch.from) && (
                       <button
                         type="button"
-                        style={{ ...styles.btn, ...styles.btnAccept, padding: "2px 8px", fontSize: "var(--font-ui-smaller)" }}
+                        style={{ ...styles.btn, ...styles.btnAccept, padding: "6px 10px", fontSize: "max(0.9375rem, var(--font-ui-small))" }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const primary = finding.patch.span ?? finding.patch.from;

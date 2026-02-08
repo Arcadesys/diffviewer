@@ -14,7 +14,8 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "var(--background-primary)",
     color: "var(--text-normal)",
     boxSizing: "border-box",
-    fontSize: "var(--font-ui-medium)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
     overflow: "auto",
   },
   section: {
@@ -23,15 +24,17 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "8px",
   },
   label: {
-    fontSize: "var(--font-ui-smaller)",
-    color: "var(--text-muted)",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    lineHeight: 1.5,
   },
   textarea: {
     width: "100%",
     minHeight: "120px",
     padding: "8px",
     fontFamily: "var(--font-monospace-theme, var(--font-monospace, monospace))",
-    fontSize: "var(--font-ui-small)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
     backgroundColor: "var(--background-primary-alt)",
     color: "var(--text-normal)",
     border: "1px solid var(--background-modifier-border)",
@@ -40,20 +43,21 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   button: {
-    padding: "6px 12px",
+    padding: "8px 14px",
     backgroundColor: "var(--interactive-accent)",
     color: "var(--text-on-accent)",
     border: "none",
     borderRadius: "4px",
     cursor: "pointer",
-    fontSize: "var(--font-ui-small)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
   },
   error: {
     padding: "8px",
     backgroundColor: "var(--background-modifier-error)",
     color: "var(--text-on-accent)",
     borderRadius: "4px",
-    fontSize: "var(--font-ui-small)",
+    fontSize: "max(1rem, var(--font-ui-medium))",
+    lineHeight: 1.5,
   },
 };
 
@@ -65,11 +69,12 @@ export interface AppProps {
   onExportText?: (text: string) => void;
   onToast?: (message: string) => void;
   onJumpToInSource?: (searchText: string, fallbackSearchText?: string) => void;
+  onHighlightInSource?: (span: string | null) => void;
   onSessionChange?: (path: string, spans: string[]) => void;
 }
 
 export function App(props: AppProps) {
-  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onSessionChange } = props;
+  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onHighlightInSource, onSessionChange } = props;
   const [rawJson, setRawJson] = useState(persistedState?.rawJson ?? "");
   const [parseResult, setParseResult] = useState<ParseSessionResult | null>(null);
 
@@ -143,6 +148,7 @@ export function App(props: AppProps) {
           onExportText={onExportText}
           onToast={onToast}
           onJumpToInSource={onJumpToInSource}
+          onHighlightInSource={onHighlightInSource}
         />
       )}
     </div>

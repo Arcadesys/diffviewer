@@ -1,61 +1,104 @@
 import { Plugin, ItemView, WorkspaceLeaf, Notice, MarkdownView } from "obsidian";
-import { RangeSetBuilder } from "@codemirror/state";
-import { Decoration, DecorationSet, EditorView, ViewPlugin, type PluginValue } from "@codemirror/view";
 import { createRoot, type Root } from "react-dom/client";
 import { StrictMode, createElement } from "react";
 import { App } from "./src/ui/App";
 import type { PersistedSessionState } from "./src/types";
 
-/** Return the file path for the editor that owns this EditorView, or null. */
-function getFilePathForEditor(app: { workspace: { iterateAllLeaves: (cb: (leaf: WorkspaceLeaf) => void) => void } }, editorView: EditorView): string | null {
-  let path: string | null = null;
-  app.workspace.iterateAllLeaves((leaf) => {
-    const view = leaf.view;
-    if (view && "file" in view && view.file && "editor" in view) {
-      const mv = view as MarkdownView;
-      const cm = (mv.editor as unknown as { cm?: EditorView }).cm;
-      if (cm === editorView) {
-        path = mv.file?.path ?? null;
-      }
-    }
-  });
-  return path;
+/** Minimal type for Obsidian editor's CodeMirror view — used only to read doc and coords (no CM bundle). */
+interface EditorCM {
+  state: { doc: { sliceString: (from: number, to?: number) => string } };
+  coordsAtPos(pos: number): { left: number; right: number; top: number; bottom: number } | null;
+  dom: HTMLElement;
+  scrollDOM: HTMLElement;
 }
 
-const HIGHLIGHT_MARK = Decoration.mark({ class: "revision-buddy-highlight" });
+const HIGHLIGHT_OVERLAY_CLASS = "revision-buddy-highlight-overlay";
+const HIGHLIGHT_OVERLAY_ATTR = "data-revision-buddy-overlay";
 
-function createRevisionBuddyHighlightExtension(plugin: RevisionBuddyPlugin): ReturnType<typeof ViewPlugin.fromClass> {
-  class RevisionBuddyHighlightPlugin implements PluginValue {
-    decorations: DecorationSet;
+function getEditorCM(view: MarkdownView): EditorCM | null {
+  const cm = (view.editor as unknown as { cm?: EditorCM }).cm;
+  return cm && typeof cm.coordsAtPos === "function" && cm.state?.doc ? cm : null;
+}
 
-    constructor(readonly view: EditorView) {
-      this.decorations = this.buildDecorations();
+/** Remove all Revision Buddy overlay elements from the workspace and detach scroll listeners. */
+function removeAllHighlightOverlays(): void {
+  document.querySelectorAll(`[${HIGHLIGHT_OVERLAY_ATTR}]`).forEach((el) => {
+    const cleanup = (el as HTMLElement & { _scrollCleanup?: () => void })._scrollCleanup;
+    if (cleanup) cleanup();
+    el.remove();
+  });
+}
+
+/** Apply highlight overlays in the editor for the given path/spans. Uses DOM overlay so it works without bundling CodeMirror. */
+function applyHighlightOverlays(
+  plugin: RevisionBuddyPlugin
+): void {
+  const { path: highlightPath, spans, focusSpan } = plugin.getHighlightState();
+  removeAllHighlightOverlays();
+  if (!highlightPath || (spans.length === 0 && !focusSpan)) return;
+
+  plugin.app.workspace.iterateAllLeaves((leaf) => {
+    const view = leaf.view;
+    if (!(view instanceof MarkdownView) || view.file?.path !== highlightPath) return;
+    const cm = getEditorCM(view);
+    if (!cm) return;
+
+    const doc = cm.state.doc;
+    const text = doc.sliceString(0);
+    const overlay = document.createElement("div");
+    overlay.className = HIGHLIGHT_OVERLAY_CLASS;
+    overlay.setAttribute(HIGHLIGHT_OVERLAY_ATTR, "true");
+    overlay.style.pointerEvents = "none";
+
+    const addRect = (pos: number, length: number, focus: boolean) => {
+      if (pos < 0 || length <= 0) return;
+      const start = cm.coordsAtPos(pos);
+      const end = cm.coordsAtPos(pos + length);
+      if (!start || !end) return;
+      const div = document.createElement("div");
+      div.className = focus ? "revision-buddy-focus-highlight" : "revision-buddy-highlight";
+      div.style.position = "absolute";
+      div.style.left = `${start.left}px`;
+      div.style.top = `${start.top}px`;
+      div.style.width = `${Math.max(end.right - start.left, 2)}px`;
+      div.style.height = `${Math.max(end.bottom - start.top, 2)}px`;
+      div.style.borderRadius = "2px";
+      overlay.appendChild(div);
+    };
+
+    for (const span of spans) {
+      if (!span) continue;
+      const pos = text.indexOf(span);
+      if (pos !== -1) addRect(pos, span.length, span === focusSpan);
+    }
+    if (focusSpan && !spans.includes(focusSpan)) {
+      const pos = text.indexOf(focusSpan);
+      if (pos !== -1) addRect(pos, focusSpan.length, true);
     }
 
-    update(): void {
-      this.decorations = this.buildDecorations();
+    if (overlay.children.length === 0) {
+      overlay.remove();
+      return;
     }
 
-    buildDecorations(): DecorationSet {
-      const { path: highlightPath, spans } = plugin.getHighlightState();
-      if (!highlightPath || !spans.length) return Decoration.none;
-      const path = getFilePathForEditor(plugin.app, this.view);
-      if (path !== highlightPath) return Decoration.none;
-      const doc = this.view.state.doc;
-      const text = doc.sliceString(0);
-      const builder = new RangeSetBuilder<Decoration>();
-      for (const span of spans) {
-        if (!span) continue;
-        const pos = text.indexOf(span);
-        if (pos !== -1) {
-          builder.add(pos, pos + span.length, HIGHLIGHT_MARK);
-        }
-      }
-      return builder.finish();
+    const scrollHandler = () => applyHighlightOverlays(plugin);
+    cm.scrollDOM.addEventListener("scroll", scrollHandler, { passive: true });
+    overlay.dataset.scrollCleanup = "1";
+    (overlay as HTMLElement & { _scrollCleanup?: () => void })._scrollCleanup = () => {
+      cm.scrollDOM.removeEventListener("scroll", scrollHandler);
+    };
+
+    const parent = cm.dom;
+    if (parent) {
+      parent.style.position = parent.style.position || "relative";
+      overlay.style.position = "absolute";
+      overlay.style.left = "0";
+      overlay.style.top = "0";
+      overlay.style.width = "100%";
+      overlay.style.height = "100%";
+      overlay.style.overflow = "hidden";
+      parent.appendChild(overlay);
     }
-  }
-  return ViewPlugin.fromClass(RevisionBuddyHighlightPlugin, {
-    decorations: (v) => v.decorations,
   });
 }
 
@@ -84,12 +127,33 @@ class RevisionBuddyView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    const { initialText, persistKey } = await this.getInitialTextAndKey();
-    this.lastInitialText = initialText;
-    this.lastPersistKey = persistKey;
-    const persisted = persistKey ? await this.plugin.getPersistedState(persistKey) : null;
-    this.root = createRoot(this.contentEl);
-    this.renderApp(initialText, persistKey, persisted);
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:onOpen:entry',message:'RevisionBuddyView.onOpen started',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+    try {
+      const { initialText, persistKey } = await this.getInitialTextAndKey();
+      // #region agent log
+      fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:onOpen:afterGetInitial',message:'getInitialTextAndKey result',data:{persistKey,initialTextLen:initialText?.length??0},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
+      this.lastInitialText = initialText;
+      this.lastPersistKey = persistKey;
+      const persisted = persistKey ? await this.plugin.getPersistedState(persistKey) : null;
+      // #region agent log
+      fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:onOpen:afterPersisted',message:'getPersistedState done',data:{hasPersisted:!!persisted},timestamp:Date.now(),hypothesisId:'H2,H4'})}).catch(()=>{});
+      // #endregion
+      this.root = createRoot(this.contentEl);
+      this.renderApp(initialText, persistKey, persisted);
+    } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:onOpen:catch',message:'onOpen threw',data:{errMsg:String(err),errName:(err as Error)?.name},timestamp:Date.now(),hypothesisId:'H2,H4'})}).catch(()=>{});
+      // #endregion
+      console.error("Revision Buddy: failed to open", err);
+      this.lastInitialText = "";
+      this.lastPersistKey = "";
+      this.root = createRoot(this.contentEl);
+      this.renderApp("", "", null);
+      new Notice("Failed to open: could not load view. Check console for details.");
+    }
   }
 
   async onClose(): Promise<void> {
@@ -99,17 +163,20 @@ class RevisionBuddyView extends ItemView {
 
   /** Open the source document and jump to the first occurrence of searchText (or fallbackSearchText), selecting it. */
   jumpToInSource(searchText: string, fallbackSearchText?: string): void {
-    const path = this.lastPersistKey;
-    if (!path || !searchText) return;
+    const path = this.lastPersistKey || (this.app.workspace.getActiveFile()?.extension === "md" ? this.app.workspace.getActiveFile()?.path ?? "" : "");
+    if (!path || !searchText) {
+      if (!path) new Notice("Open a note first, or open Revision Buddy with a note active.");
+      return;
+    }
     const file = this.app.vault.getFileByPath(path);
     if (!file) {
       new Notice("Source file not found");
       return;
     }
-    this.app.workspace.openFile(file).then(() => {
-      const workspace = this.app.workspace;
+
+    const runSelectAndFocus = (): void => {
       let targetLeaf: WorkspaceLeaf | null = null;
-      workspace.iterateAllLeaves((leaf) => {
+      this.app.workspace.iterateAllLeaves((leaf) => {
         const view = leaf.view;
         if (view instanceof MarkdownView && view.file?.path === path) {
           targetLeaf = leaf;
@@ -140,7 +207,36 @@ class RevisionBuddyView extends ItemView {
       const to = editor.offsetToPos(pos + matchedText.length);
       editor.setSelection(from, to);
       editor.scrollIntoView({ from, to }, true);
-      workspace.setActiveLeaf(targetLeaf, { focus: true });
+      this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
+      this.plugin.refreshHighlightsPublic();
+    };
+
+    let targetLeaf: WorkspaceLeaf | null = null;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (leaf.view instanceof MarkdownView && leaf.view.file?.path === path) targetLeaf = leaf;
+    });
+
+    if (targetLeaf) {
+      this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
+      setTimeout(runSelectAndFocus, 50);
+      return;
+    }
+
+    const workspace = this.app.workspace as Workspace & { activeLeaf: WorkspaceLeaf | null; getLeaf: (split?: boolean | "split" | "tab") => WorkspaceLeaf };
+    const activeLeaf = workspace.activeLeaf;
+    let leafToOpen: WorkspaceLeaf;
+    if (activeLeaf?.view && (activeLeaf.view as { getViewType?: () => string }).getViewType?.() === REVISION_BUDDY_VIEW_TYPE) {
+      leafToOpen = workspace.getLeaf(true);
+      workspace.setActiveLeaf(leafToOpen, { focus: true });
+    } else {
+      leafToOpen = workspace.getLeaf(false);
+    }
+    const leafWithOpen = leafToOpen as WorkspaceLeaf & { openFile: (file: TFile) => Promise<void> };
+    leafWithOpen.openFile(file).then(() => {
+      setTimeout(runSelectAndFocus, 150);
+    }).catch((err) => {
+      new Notice("Failed to open file");
+      console.error("Revision Buddy: openFile failed", err);
     });
   }
 
@@ -158,6 +254,7 @@ class RevisionBuddyView extends ItemView {
           onExportText: (text: string) => this.plugin.setLastExportedText(text, persistKey),
           onToast: (message: string) => new Notice(message),
           onJumpToInSource: (searchText: string, fallback?: string) => this.jumpToInSource(searchText, fallback),
+          onHighlightInSource: (span: string | null) => this.plugin.setFocusHighlight(span),
           onSessionChange: (path: string, spans: string[]) => this.plugin.setHighlightRanges(path || null, spans),
         })
       )
@@ -184,9 +281,13 @@ export default class RevisionBuddyPlugin extends Plugin {
   private lastExported: { text: string; path: string } | null = null;
   private highlightPath: string | null = null;
   private highlightSpans: string[] = [];
+  private focusHighlightSpan: string | null = null;
+  private resizeHandler: (() => void) | null = null;
+  private resizeDebounceId: ReturnType<typeof setTimeout> | null = null;
+  private static readonly RESIZE_DEBOUNCE_MS = 80;
 
-  getHighlightState(): { path: string | null; spans: string[] } {
-    return { path: this.highlightPath, spans: this.highlightSpans };
+  getHighlightState(): { path: string | null; spans: string[]; focusSpan: string | null } {
+    return { path: this.highlightPath, spans: this.highlightSpans, focusSpan: this.focusHighlightSpan };
   }
 
   setHighlightRanges(path: string | null, spans: string[]): void {
@@ -195,16 +296,26 @@ export default class RevisionBuddyPlugin extends Plugin {
     this.refreshHighlightInEditor();
   }
 
+  setFocusHighlight(span: string | null): void {
+    this.focusHighlightSpan = span ?? null;
+    this.refreshHighlightInEditor();
+  }
+
   private refreshHighlightInEditor(): void {
-    const path = this.highlightPath;
-    if (!path) return;
-    this.app.workspace.iterateAllLeaves((leaf) => {
-      const view = leaf.view;
-      if (view instanceof MarkdownView && view.file?.path === path) {
-        const cm = (view.editor as unknown as { cm?: EditorView }).cm;
-        if (cm) cm.dispatch({});
-      }
-    });
+    applyHighlightOverlays(this);
+  }
+
+  private onResize(): void {
+    if (this.resizeDebounceId !== null) clearTimeout(this.resizeDebounceId);
+    this.resizeDebounceId = setTimeout(() => {
+      this.resizeDebounceId = null;
+      this.refreshHighlightInEditor();
+    }, RevisionBuddyPlugin.RESIZE_DEBOUNCE_MS);
+  }
+
+  /** Public so the Revision Buddy view can refresh highlights after jump-to (MVP). */
+  refreshHighlightsPublic(): void {
+    this.refreshHighlightInEditor();
   }
 
   setLastExportedText(text: string, path: string): void {
@@ -231,8 +342,9 @@ export default class RevisionBuddyPlugin extends Plugin {
 
   async onload(): Promise<void> {
     this.registerView(REVISION_BUDDY_VIEW_TYPE, (leaf) => new RevisionBuddyView(leaf, this));
-    this.registerEditorExtension(createRevisionBuddyHighlightExtension(this));
     this.addStyles();
+    this.resizeHandler = () => this.onResize();
+    window.addEventListener("resize", this.resizeHandler);
     this.addCommand({
       id: "open-revision-buddy",
       name: "Open Revision Buddy",
@@ -256,7 +368,17 @@ export default class RevisionBuddyPlugin extends Plugin {
     this.addRibbonIcon("file-search", "Open Revision Buddy", () => this.activateView());
   }
 
-  async onunload(): Promise<void> {}
+  async onunload(): Promise<void> {
+    if (this.resizeDebounceId !== null) {
+      clearTimeout(this.resizeDebounceId);
+      this.resizeDebounceId = null;
+    }
+    if (this.resizeHandler) {
+      window.removeEventListener("resize", this.resizeHandler);
+      this.resizeHandler = null;
+    }
+    removeAllHighlightOverlays();
+  }
 
   private addStyles(): void {
     this.register(() => {
@@ -265,10 +387,23 @@ export default class RevisionBuddyPlugin extends Plugin {
     document.body.addClass("revision-buddy-highlights-loaded");
     const style = document.createElement("style");
     style.textContent = `
+      /* Low-vision friendly: readable base size and line height in the sidebar */
+      .revision-buddy-view {
+        font-size: max(16px, var(--font-ui-medium, 1rem));
+        line-height: 1.5;
+      }
+      .revision-buddy-highlights-loaded .revision-buddy-highlight-overlay {
+        pointer-events: none;
+        z-index: 5;
+      }
       .revision-buddy-highlights-loaded .revision-buddy-highlight {
         background-color: var(--text-selection);
         border-radius: 2px;
-        padding: 0 1px;
+      }
+      .revision-buddy-highlights-loaded .revision-buddy-focus-highlight {
+        background-color: var(--interactive-accent);
+        color: var(--text-on-accent);
+        border-radius: 2px;
       }
     `;
     document.head.appendChild(style);
@@ -276,16 +411,29 @@ export default class RevisionBuddyPlugin extends Plugin {
   }
 
   private async activateView(): Promise<void> {
-    const { workspace } = this.app;
+    const workspace = this.app.workspace as Workspace & { getRightLeaf: (replace?: boolean) => WorkspaceLeaf | null; getLeaf: (split?: boolean | "split" | "tab") => WorkspaceLeaf };
     const leaves = workspace.getLeavesOfType(REVISION_BUDDY_VIEW_TYPE);
+    const rightLeaf = workspace.getRightLeaf(false);
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:activateView:entry',message:'activateView called',data:{leavesCount:leaves.length,hasRightLeaf:!!rightLeaf,hasGetLeaf:typeof (workspace as { getLeaf?: unknown }).getLeaf},timestamp:Date.now(),hypothesisId:'H1,H3'})}).catch(()=>{});
+    // #endregion
     if (leaves.length > 0) {
       workspace.revealLeaf(leaves[0]);
       return;
     }
-    const rightLeaf = workspace.getRightLeaf(false);
-    if (rightLeaf) {
-      await rightLeaf.setViewState({ type: REVISION_BUDDY_VIEW_TYPE });
-      workspace.revealLeaf(rightLeaf);
+    const leaf = rightLeaf ?? workspace.getLeaf(true);
+    // #region agent log
+    fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:activateView:beforeSetViewState',message:'about to setViewState',data:{usedRightLeaf:!!rightLeaf},timestamp:Date.now(),hypothesisId:'H1,H3'})}).catch(()=>{});
+    // #endregion
+    try {
+      await leaf.setViewState({ type: REVISION_BUDDY_VIEW_TYPE });
+      workspace.revealLeaf(leaf);
+    } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'main.ts:activateView:catch',message:'activateView setViewState threw',data:{errMsg:String(err)},timestamp:Date.now(),hypothesisId:'H1,H3'})}).catch(()=>{});
+      // #endregion
+      new Notice("Failed to open Revision Buddy");
+      console.error("Revision Buddy: failed to open view", err);
     }
   }
 }
