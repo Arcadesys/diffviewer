@@ -4,3 +4,5 @@ main.js
 .DS_Store
 release/
 *.zip
+.cursor/
+data.json

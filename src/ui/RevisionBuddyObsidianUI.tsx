@@ -454,6 +454,18 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     }
   }, [findings.length, selectedFindingIndex]);
 
+  // When presenting a line edit, highlight its associated span in the source editor
+  useEffect(() => {
+    if (!onHighlightInSource) return;
+    if (activeTab !== "line-edits") {
+      onHighlightInSource(null);
+      return;
+    }
+    const finding = findings[selectedFindingIndex] ?? null;
+    const span = finding ? (finding.patch.span ?? finding.patch.from) : null;
+    onHighlightInSource(span && span.length > 0 ? span : null);
+  }, [activeTab, selectedFindingIndex, findings, onHighlightInSource]);
+
   useEffect(() => {
     if (onPersistState) {
       const acceptedOptionByIndexForPersist: Record<string, number> = {};
