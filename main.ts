@@ -395,8 +395,21 @@ export default class RevisionBuddyPlugin extends Plugin {
   }
 
   /**
+   * Find the MarkdownView for a given file path, if it is open.
+   */
+  private getMarkdownViewForPath(filePath: string): MarkdownView | null {
+    let found: MarkdownView | null = null;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.file?.path === filePath) found = view;
+    });
+    return found;
+  }
+
+  /**
    * Apply a suggestion as a replacement in the source file: find spanText, replace with replacementText.
    * Uses same single-occurrence rule as patchApply. Returns true if applied.
+   * When the file is open, plays a short "delete then retype" animation so the edit is visible.
    */
   async applySuggestionToSource(filePath: string, spanText: string, replacementText: string): Promise<boolean> {
     if (!filePath?.trim() || !spanText) {
@@ -419,6 +432,29 @@ export default class RevisionBuddyPlugin extends Plugin {
         new Notice(result.reason);
         return false;
       }
+
+      const view = this.getMarkdownViewForPath(filePath);
+      if (view) {
+        const editor = view.editor;
+        const content = editor.getValue();
+        const pos = content.indexOf(spanText);
+        if (pos !== -1) {
+          const from = editor.offsetToPos(pos);
+          const to = editor.offsetToPos(pos + spanText.length);
+          editor.setSelection(from, to);
+          editor.scrollIntoView({ from, to }, true);
+          // Delete-then-retype animation so the user sees the edit happen
+          editor.replaceRange("", from, to);
+          const insertFrom = editor.offsetToPos(pos);
+          setTimeout(() => {
+            editor.replaceRange(replacementText, insertFrom, insertFrom);
+            // Brief focus highlight on the new text so it's obvious what changed
+            this.setFocusHighlight(replacementText);
+            setTimeout(() => this.setFocusHighlight(null), 1200);
+          }, 180);
+        }
+      }
+
       await this.app.vault.modify(file, result.text);
       new Notice("Applied to document");
       return true;
