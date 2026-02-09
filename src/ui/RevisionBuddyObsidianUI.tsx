@@ -261,6 +261,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "max(1rem, var(--font-ui-medium))",
     lineHeight: 1.5,
   },
+  singleFindingCard: {
+    padding: "12px",
+    backgroundColor: "var(--background-secondary)",
+    borderRadius: "4px",
+    border: "1px solid var(--background-modifier-border)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    flex: 1,
+    minHeight: 0,
+    overflowY: "auto",
+  },
+  navRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 0",
+    borderBottom: "1px solid var(--background-modifier-border)",
+  },
+  navLabel: {
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    color: "var(--text-normal)",
+    minWidth: "4ch",
+  },
 };
 
 export interface RevisionBuddyObsidianUIProps {
@@ -274,6 +298,8 @@ export interface RevisionBuddyObsidianUIProps {
   initialIgnoredIndices?: number[];
   /** Persisted: finding index -> option index (string keys from JSON). */
   initialAcceptedOptionByIndex?: Record<string, number>;
+  /** Persisted: index of the finding shown in single-comment view. */
+  initialSelectedFindingIndex?: number;
   rawJson: string;
   onPersistState?: (state: PersistedSessionState) => void;
   onExportText?: (text: string) => void;
@@ -353,6 +379,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     initialAcceptedIndices,
     initialIgnoredIndices,
     initialAcceptedOptionByIndex,
+    initialSelectedFindingIndex,
     rawJson,
     onPersistState,
     onExportText,
@@ -360,6 +387,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     onJumpToInSource,
     onHighlightInSource,
   } = props;
+  const findings = session.findings;
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(() => new Set(initialAcceptedIndices ?? []));
   const [ignoredIndices, setIgnoredIndices] = useState<Set<number>>(() => new Set(initialIgnoredIndices ?? []));
   const [acceptedOptionByIndex, setAcceptedOptionByIndex] = useState<Record<number, number>>(() => {
@@ -372,12 +400,25 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     }
     return out;
   });
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [modalIndex, setModalIndex] = useState<number | null>(null);
+  const [selectedFindingIndex, setSelectedFindingIndex] = useState<number>(() => {
+    const n = findings.length;
+    if (n === 0) return 0;
+    const raw = initialSelectedFindingIndex ?? 0;
+    return Math.min(Math.max(0, raw), n - 1);
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   const [docCommentsCollapsed, setDocCommentsCollapsed] = useState(false);
   const [expandedDocCommentIndex, setExpandedDocCommentIndex] = useState<number | null>(null);
+
+  // Clamp selected index when session has fewer findings (e.g. different file or reload)
+  useEffect(() => {
+    const n = findings.length;
+    if (n === 0) return;
+    if (selectedFindingIndex >= n) {
+      setSelectedFindingIndex(Math.max(0, n - 1));
+    }
+  }, [findings.length, selectedFindingIndex]);
 
   useEffect(() => {
     if (onPersistState) {
@@ -390,9 +431,10 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         acceptedIndices: Array.from(acceptedIndices),
         ignoredIndices: Array.from(ignoredIndices),
         acceptedOptionByIndex: Object.keys(acceptedOptionByIndexForPersist).length > 0 ? acceptedOptionByIndexForPersist : undefined,
+        selectedFindingIndex,
       });
     }
-  }, [rawJson, acceptedIndices, ignoredIndices, acceptedOptionByIndex, onPersistState]);
+  }, [rawJson, acceptedIndices, ignoredIndices, acceptedOptionByIndex, selectedFindingIndex, onPersistState]);
 
   const showToast = useCallback(
     (msg: string) => {
@@ -425,7 +467,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
       const result = applyPatch(textSoFar, finding.patch);
       if (result.ok) {
         setAcceptedIndices((prev) => new Set(prev).add(index));
-        setModalIndex(null);
+        setSelectedFindingIndex((i) => Math.min(i + 1, session.findings.length - 1));
       } else {
         showToast(result.reason);
       }
@@ -444,7 +486,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
       if (result.ok) {
         setAcceptedOptionByIndex((prev) => ({ ...prev, [findingIndex]: optionIndex }));
         setAcceptedIndices((prev) => new Set(prev).add(findingIndex));
-        setModalIndex(null);
+        setSelectedFindingIndex((i) => Math.min(i + 1, session.findings.length - 1));
       } else {
         showToast(result.reason);
       }
@@ -455,9 +497,9 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
   const handleIgnore = useCallback(
     (index: number) => {
       setIgnoredIndices((prev) => new Set(prev).add(index));
-      setModalIndex(null);
+      setSelectedFindingIndex((i) => Math.min(i + 1, session.findings.length - 1));
     },
-    []
+    [session.findings.length]
   );
 
   const handleCopyText = useCallback(() => {
@@ -470,8 +512,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     );
   }, [currentText, onExportText, showToast]);
 
-  const findings = session.findings;
-  const modalFinding = modalIndex !== null ? findings[modalIndex] : null;
+  const currentFinding = findings[selectedFindingIndex] ?? null;
 
   return (
     <div style={styles.container}>
@@ -626,134 +667,75 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         </div>
       )}
 
-      <ul style={styles.list}>
-        {findings.map((finding, index) => {
-          const isAccepted = acceptedIndices.has(index) || acceptedOptionByIndex[index] !== undefined;
-          const isIgnored = ignoredIndices.has(index);
-          const isExpanded = expandedIndex === index;
-          const meta = findingMeta?.[index];
-          const acceptedOptionIndex = acceptedOptionByIndex[index];
-          const status = isAccepted ? (acceptedOptionIndex !== undefined && meta?.patchOptions ? `Accepted: ${meta.patchOptions[acceptedOptionIndex]?.label ?? "Option"}` : "Accepted") : isIgnored ? "Complete" : null;
-          const label =
-            status || finding.comment.split("\n")[0]?.slice(0, 60) || `Finding ${index + 1}`;
-          const applyable = meta?.hasPatch !== false;
-          const hasMultiplePatchOptions = Boolean(meta?.patchOptions && meta.patchOptions.length > 1);
-          const onAcceptOptionDefined = Boolean(meta?.patchOptions && meta.patchOptions.length > 1);
-          // #region agent log
-          fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RevisionBuddyObsidianUI.tsx:findings.map',message:'finding meta and option state',data:{index,suggestionsLength:meta?.suggestions?.length ?? 0,patchOptionsLength:meta?.patchOptions?.length ?? 0,applyable,hasMultiplePatchOptions,onAcceptOptionDefined},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-          // #endregion
-
-          const isNoRevision = meta?.hasPatch === false;
-          return (
-            <li key={finding.id ?? index}>
-              <div
-                style={{
-                  ...styles.item,
-                  ...(isExpanded ? styles.itemExpanded : {}),
-                  ...(isNoRevision ? styles.itemNoRevision : {}),
-                }}
-                onClick={() => setExpandedIndex(isExpanded ? null : index)}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
-                  <span style={styles.comment}>{label}</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "max(0.9375rem, var(--font-ui-small))", color: "var(--text-normal)", lineHeight: 1.5 }}>
-                    {onJumpToInSource && (finding.patch.span ?? finding.patch.from) && (
-                      <button
-                        type="button"
-                        style={{ ...styles.btn, ...styles.btnAccept, padding: "6px 10px", fontSize: "max(0.9375rem, var(--font-ui-small))" }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const primary = finding.patch.span ?? finding.patch.from;
-                          const fallback = primary !== finding.patch.from ? finding.patch.from : undefined;
-                          onJumpToInSource(primary, fallback);
-                        }}
-                      >
-                        Go to
-                      </button>
-                    )}
-                    {meta?.agent_id && <span>{meta.agent_id}</span>}
-                    {finding.severity && <span>{finding.severity}</span>}
-                    {status && <span>{status}</span>}
-                    {isNoRevision && <span style={styles.noRevisionBadge}>No changes needed</span>}
-                    {!applyable && !status && !isNoRevision && <span>Suggestion only</span>}
-                  </div>
-                </div>
-                {isExpanded && (
-                  <FindingDetail
-                    finding={finding}
-                    index={index}
-                    meta={meta}
-                    attachedSnippet={getSnippetWithMatch(
-                      getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, index),
-                      finding.patch.span ?? finding.patch.from
-                    )}
-                    onAccept={() => handleAccept(index)}
-                    onAcceptOption={meta?.patchOptions && meta.patchOptions.length > 1 ? (optionIndex) => handleAcceptOption(index, optionIndex) : undefined}
-                    acceptedOptionIndex={acceptedOptionIndex}
-                    onIgnore={() => handleIgnore(index)}
-                    onOpenModal={() => setModalIndex(index)}
-                    onJumpToInSource={
-                    onJumpToInSource
-                      ? () => {
-                          const primary = finding.patch.span ?? finding.patch.from;
-                          const fallback = primary !== finding.patch.from ? finding.patch.from : undefined;
-                          onJumpToInSource(primary, fallback);
-                        }
-                      : undefined
-                  }
-                    disabledAccept={isAccepted || isIgnored || !applyable}
-                    disabledIgnore={isAccepted || isIgnored}
-                  />
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      {modalFinding !== null && modalIndex !== null && (
-        <div
-          style={styles.overlay}
-          onClick={(e) => e.target === e.currentTarget && setModalIndex(null)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <FindingDetail
-              finding={modalFinding}
-              index={modalIndex}
-              meta={findingMeta?.[modalIndex]}
-              attachedSnippet={getSnippetWithMatch(
-                getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, modalIndex),
-                modalFinding.patch.span ?? modalFinding.patch.from
-              )}
-              onAccept={() => handleAccept(modalIndex)}
-              onAcceptOption={findingMeta?.[modalIndex]?.patchOptions && findingMeta[modalIndex].patchOptions!.length > 1 ? (optionIndex) => handleAcceptOption(modalIndex, optionIndex) : undefined}
-              acceptedOptionIndex={acceptedOptionByIndex[modalIndex]}
-              onIgnore={() => handleIgnore(modalIndex)}
-              onOpenModal={() => {}}
-              onJumpToInSource={
-                      onJumpToInSource
-                        ? () => {
-                            const primary = modalFinding.patch.span ?? modalFinding.patch.from;
-                            const fallback = primary !== modalFinding.patch.from ? modalFinding.patch.from : undefined;
-                            onJumpToInSource(primary, fallback);
-                          }
-                        : undefined
-                    }
-              disabledAccept={acceptedIndices.has(modalIndex) || ignoredIndices.has(modalIndex) || acceptedOptionByIndex[modalIndex] !== undefined || !canAcceptFinding(modalIndex)}
-              disabledIgnore={acceptedIndices.has(modalIndex) || ignoredIndices.has(modalIndex)}
-              showFull
-            />
+      {findings.length === 0 ? (
+        <div style={styles.singleFindingCard}>
+          <div style={styles.comment}>No findings to review.</div>
+        </div>
+      ) : (
+        <>
+          <div style={styles.navRow}>
             <button
               type="button"
-              style={{ ...styles.btn, ...styles.btnIgnore, marginTop: "12px" }}
-              onClick={() => setModalIndex(null)}
+              style={{ ...styles.btn, ...styles.btnIgnore }}
+              onClick={() => setSelectedFindingIndex((i) => Math.max(0, i - 1))}
+              disabled={selectedFindingIndex <= 0}
+              aria-label="Previous finding"
             >
-              Close
+              Previous
+            </button>
+            <span style={styles.navLabel} aria-live="polite">
+              {selectedFindingIndex + 1} of {findings.length}
+            </span>
+            <button
+              type="button"
+              style={{ ...styles.btn, ...styles.btnIgnore }}
+              onClick={() => setSelectedFindingIndex((i) => Math.min(findings.length - 1, i + 1))}
+              disabled={selectedFindingIndex >= findings.length - 1}
+              aria-label="Next finding"
+            >
+              Next
             </button>
           </div>
-        </div>
+          {currentFinding && (
+            <div style={styles.singleFindingCard}>
+              <FindingDetail
+                finding={currentFinding}
+                index={selectedFindingIndex}
+                meta={findingMeta?.[selectedFindingIndex]}
+                attachedSnippet={getSnippetWithMatch(
+                  getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, selectedFindingIndex),
+                  currentFinding.patch.span ?? currentFinding.patch.from
+                )}
+                onAccept={() => handleAccept(selectedFindingIndex)}
+                onAcceptOption={
+                  findingMeta?.[selectedFindingIndex]?.patchOptions && findingMeta[selectedFindingIndex].patchOptions!.length > 1
+                    ? (optionIndex) => handleAcceptOption(selectedFindingIndex, optionIndex)
+                    : undefined
+                }
+                acceptedOptionIndex={acceptedOptionByIndex[selectedFindingIndex]}
+                onIgnore={() => handleIgnore(selectedFindingIndex)}
+                onOpenModal={() => {}}
+                onJumpToInSource={
+                  onJumpToInSource
+                    ? () => {
+                        const primary = currentFinding.patch.span ?? currentFinding.patch.from;
+                        const fallback = primary !== currentFinding.patch.from ? currentFinding.patch.from : undefined;
+                        onJumpToInSource(primary, fallback);
+                      }
+                    : undefined
+                }
+                disabledAccept={
+                  acceptedIndices.has(selectedFindingIndex) ||
+                  ignoredIndices.has(selectedFindingIndex) ||
+                  acceptedOptionByIndex[selectedFindingIndex] !== undefined ||
+                  !canAcceptFinding(selectedFindingIndex)
+                }
+                disabledIgnore={acceptedIndices.has(selectedFindingIndex) || ignoredIndices.has(selectedFindingIndex)}
+                showFull
+              />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

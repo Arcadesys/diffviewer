@@ -144,6 +144,7 @@ export function App(props: AppProps) {
           initialAcceptedIndices={persistedState?.acceptedIndices}
           initialIgnoredIndices={persistedState?.ignoredIndices}
           initialAcceptedOptionByIndex={persistedState?.acceptedOptionByIndex}
+          initialSelectedFindingIndex={persistedState?.selectedFindingIndex}
           rawJson={rawJson}
           onPersistState={onPersistState}
           onExportText={onExportText}

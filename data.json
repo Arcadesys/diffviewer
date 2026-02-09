@@ -6,7 +6,8 @@
         2,
         9
       ],
-      "ignoredIndices": []
+      "ignoredIndices": [],
+      "selectedFindingIndex": 0
     }
   }
 }
