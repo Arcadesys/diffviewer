@@ -262,6 +262,8 @@ export interface RevisionBuddyObsidianUIProps {
   findingMeta?: FindingMeta[];
   initialAcceptedIndices?: number[];
   initialIgnoredIndices?: number[];
+  /** Persisted: finding index -> option index (string keys from JSON). */
+  initialAcceptedOptionByIndex?: Record<string, number>;
   rawJson: string;
   onPersistState?: (state: PersistedSessionState) => void;
   onExportText?: (text: string) => void;
@@ -270,22 +272,50 @@ export interface RevisionBuddyObsidianUIProps {
   onHighlightInSource?: (span: string | null) => void;
 }
 
-function computeCurrentText(initialText: string, session: Session, acceptedIndices: Set<number>): string {
-  const order = Array.from(acceptedIndices).sort((a, b) => a - b);
+function getAllAcceptedIndices(acceptedIndices: Set<number>, acceptedOptionByIndex: Record<number, number>): Set<number> {
+  const set = new Set(acceptedIndices);
+  for (const key of Object.keys(acceptedOptionByIndex)) {
+    set.add(Number(key));
+  }
+  return set;
+}
+
+function computeCurrentText(
+  initialText: string,
+  session: Session,
+  acceptedIndices: Set<number>,
+  findingMeta: FindingMeta[] | undefined,
+  acceptedOptionByIndex: Record<number, number>,
+  maxIndex?: number
+): string {
+  const allAccepted = getAllAcceptedIndices(acceptedIndices, acceptedOptionByIndex);
+  const order = [...allAccepted].filter((i) => maxIndex === undefined || i < maxIndex).sort((a, b) => a - b);
   let text = initialText;
   for (const i of order) {
     const finding = session.findings[i];
     if (!finding) continue;
-    const result = applyPatch(text, finding.patch);
+    const meta = findingMeta?.[i];
+    const patch =
+      meta?.patchOptions && acceptedOptionByIndex[i] !== undefined
+        ? meta.patchOptions[acceptedOptionByIndex[i]]?.patch
+        : finding.patch;
+    if (!patch) continue;
+    const result = applyPatch(text, patch);
     if (result.ok) text = result.text;
   }
   return text;
 }
 
 /** Text as it would be when we're about to apply the finding at given index (only earlier acceptances applied). */
-function getTextForFinding(initialText: string, session: Session, acceptedIndices: Set<number>, findingIndex: number): string {
-  const earlierAccepted = new Set([...acceptedIndices].filter((i) => i < findingIndex));
-  return computeCurrentText(initialText, session, earlierAccepted);
+function getTextForFinding(
+  initialText: string,
+  session: Session,
+  acceptedIndices: Set<number>,
+  findingMeta: FindingMeta[] | undefined,
+  acceptedOptionByIndex: Record<number, number>,
+  findingIndex: number
+): string {
+  return computeCurrentText(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, findingIndex);
 }
 
 /** Return a snippet of text with the match highlighted: { before, match, after } or null if not found. */
@@ -312,6 +342,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     findingMeta,
     initialAcceptedIndices,
     initialIgnoredIndices,
+    initialAcceptedOptionByIndex,
     rawJson,
     onPersistState,
     onExportText,
@@ -321,6 +352,16 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
   } = props;
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(() => new Set(initialAcceptedIndices ?? []));
   const [ignoredIndices, setIgnoredIndices] = useState<Set<number>>(() => new Set(initialIgnoredIndices ?? []));
+  const [acceptedOptionByIndex, setAcceptedOptionByIndex] = useState<Record<number, number>>(() => {
+    const raw = initialAcceptedOptionByIndex;
+    if (!raw || typeof raw !== "object") return {};
+    const out: Record<number, number> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const idx = Number(k);
+      if (Number.isInteger(idx) && Number.isInteger(v)) out[idx] = v;
+    }
+    return out;
+  });
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [modalIndex, setModalIndex] = useState<number | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -330,13 +371,18 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
 
   useEffect(() => {
     if (onPersistState) {
+      const acceptedOptionByIndexForPersist: Record<string, number> = {};
+      for (const [k, v] of Object.entries(acceptedOptionByIndex)) {
+        acceptedOptionByIndexForPersist[String(k)] = v;
+      }
       onPersistState({
         rawJson,
         acceptedIndices: Array.from(acceptedIndices),
         ignoredIndices: Array.from(ignoredIndices),
+        acceptedOptionByIndex: Object.keys(acceptedOptionByIndexForPersist).length > 0 ? acceptedOptionByIndexForPersist : undefined,
       });
     }
-  }, [rawJson, acceptedIndices, ignoredIndices, onPersistState]);
+  }, [rawJson, acceptedIndices, ignoredIndices, acceptedOptionByIndex, onPersistState]);
 
   const showToast = useCallback(
     (msg: string) => {
@@ -347,8 +393,8 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
   );
 
   const currentText = useMemo(
-    () => computeCurrentText(initialText, session, acceptedIndices),
-    [initialText, session, acceptedIndices]
+    () => computeCurrentText(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex),
+    [initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex]
   );
 
   const canAcceptFinding = useCallback(
@@ -362,10 +408,10 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
   const handleAccept = useCallback(
     (index: number) => {
       if (!canAcceptFinding(index)) return;
-      if (acceptedIndices.has(index) || ignoredIndices.has(index)) return;
+      if (acceptedIndices.has(index) || ignoredIndices.has(index) || acceptedOptionByIndex[index] !== undefined) return;
       const finding = session.findings[index];
       if (!finding) return;
-      const textSoFar = computeCurrentText(initialText, session, acceptedIndices);
+      const textSoFar = computeCurrentText(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex);
       const result = applyPatch(textSoFar, finding.patch);
       if (result.ok) {
         setAcceptedIndices((prev) => new Set(prev).add(index));
@@ -374,7 +420,26 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         showToast(result.reason);
       }
     },
-    [session, initialText, acceptedIndices, ignoredIndices, showToast, canAcceptFinding]
+    [session, initialText, acceptedIndices, acceptedOptionByIndex, ignoredIndices, findingMeta, showToast, canAcceptFinding]
+  );
+
+  const handleAcceptOption = useCallback(
+    (findingIndex: number, optionIndex: number) => {
+      if (acceptedIndices.has(findingIndex) || ignoredIndices.has(findingIndex) || acceptedOptionByIndex[findingIndex] !== undefined) return;
+      const meta = findingMeta?.[findingIndex];
+      const optionPatch = meta?.patchOptions?.[optionIndex]?.patch;
+      if (!optionPatch) return;
+      const textSoFar = computeCurrentText(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex);
+      const result = applyPatch(textSoFar, optionPatch);
+      if (result.ok) {
+        setAcceptedOptionByIndex((prev) => ({ ...prev, [findingIndex]: optionIndex }));
+        setAcceptedIndices((prev) => new Set(prev).add(findingIndex));
+        setModalIndex(null);
+      } else {
+        showToast(result.reason);
+      }
+    },
+    [session, initialText, acceptedIndices, acceptedOptionByIndex, ignoredIndices, findingMeta, showToast]
   );
 
   const handleIgnore = useCallback(
@@ -518,6 +583,24 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                     {dc.confidence && (
                       <div style={styles.metaLabel}>Confidence: {dc.confidence}</div>
                     )}
+                    {!dc.anchor_quote ? null : (dc.patch || (dc.suggestions && dc.suggestions.length > 0)) ? (
+                      <>
+                        <div style={{ ...styles.metaLabel, marginTop: "6px" }}>Recommended edit</div>
+                        {dc.patch && (
+                          <div style={styles.preview}>
+                            <div>from: {dc.patch.from}</div>
+                            <div style={styles.fromTo}>to: {dc.patch.to}</div>
+                          </div>
+                        )}
+                        {dc.suggestions && dc.suggestions.length > 0 && (
+                          <ul style={styles.suggestionsList}>
+                            {dc.suggestions.map((s, si) => (
+                              <li key={si}>{s}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    ) : null}
                     <div style={{ ...styles.metaLabel, marginTop: "6px", color: "var(--interactive-accent)" }}>
                       {isExpanded
                         ? "Click to collapse"
@@ -535,14 +618,20 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
 
       <ul style={styles.list}>
         {findings.map((finding, index) => {
-          const isAccepted = acceptedIndices.has(index);
+          const isAccepted = acceptedIndices.has(index) || acceptedOptionByIndex[index] !== undefined;
           const isIgnored = ignoredIndices.has(index);
           const isExpanded = expandedIndex === index;
           const meta = findingMeta?.[index];
-          const status = isAccepted ? "Accepted" : isIgnored ? "Ignored" : null;
+          const acceptedOptionIndex = acceptedOptionByIndex[index];
+          const status = isAccepted ? (acceptedOptionIndex !== undefined && meta?.patchOptions ? `Accepted: ${meta.patchOptions[acceptedOptionIndex]?.label ?? "Option"}` : "Accepted") : isIgnored ? "Ignored" : null;
           const label =
             status || finding.comment.split("\n")[0]?.slice(0, 60) || `Finding ${index + 1}`;
           const applyable = meta?.hasPatch !== false;
+          const hasMultiplePatchOptions = Boolean(meta?.patchOptions && meta.patchOptions.length > 1);
+          const onAcceptOptionDefined = Boolean(meta?.patchOptions && meta.patchOptions.length > 1);
+          // #region agent log
+          fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RevisionBuddyObsidianUI.tsx:findings.map',message:'finding meta and option state',data:{index,suggestionsLength:meta?.suggestions?.length ?? 0,patchOptionsLength:meta?.patchOptions?.length ?? 0,applyable,hasMultiplePatchOptions,onAcceptOptionDefined},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+          // #endregion
 
           return (
             <li key={finding.id ?? index}>
@@ -582,10 +671,12 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                     index={index}
                     meta={meta}
                     attachedSnippet={getSnippetWithMatch(
-                      getTextForFinding(initialText, session, acceptedIndices, index),
+                      getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, index),
                       finding.patch.span ?? finding.patch.from
                     )}
                     onAccept={() => handleAccept(index)}
+                    onAcceptOption={meta?.patchOptions && meta.patchOptions.length > 1 ? (optionIndex) => handleAcceptOption(index, optionIndex) : undefined}
+                    acceptedOptionIndex={acceptedOptionIndex}
                     onIgnore={() => handleIgnore(index)}
                     onOpenModal={() => setModalIndex(index)}
                     onJumpToInSource={
@@ -620,10 +711,12 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
               index={modalIndex}
               meta={findingMeta?.[modalIndex]}
               attachedSnippet={getSnippetWithMatch(
-                getTextForFinding(initialText, session, acceptedIndices, modalIndex),
+                getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, modalIndex),
                 modalFinding.patch.span ?? modalFinding.patch.from
               )}
               onAccept={() => handleAccept(modalIndex)}
+              onAcceptOption={findingMeta?.[modalIndex]?.patchOptions && findingMeta[modalIndex].patchOptions!.length > 1 ? (optionIndex) => handleAcceptOption(modalIndex, optionIndex) : undefined}
+              acceptedOptionIndex={acceptedOptionByIndex[modalIndex]}
               onIgnore={() => handleIgnore(modalIndex)}
               onOpenModal={() => {}}
               onJumpToInSource={
@@ -635,7 +728,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                           }
                         : undefined
                     }
-              disabledAccept={acceptedIndices.has(modalIndex) || ignoredIndices.has(modalIndex) || !canAcceptFinding(modalIndex)}
+              disabledAccept={acceptedIndices.has(modalIndex) || ignoredIndices.has(modalIndex) || acceptedOptionByIndex[modalIndex] !== undefined || !canAcceptFinding(modalIndex)}
               disabledIgnore={acceptedIndices.has(modalIndex) || ignoredIndices.has(modalIndex)}
               showFull
             />
@@ -659,6 +752,8 @@ function FindingDetail({
   meta,
   attachedSnippet,
   onAccept,
+  onAcceptOption,
+  acceptedOptionIndex,
   onIgnore,
   onOpenModal,
   onJumpToInSource,
@@ -671,6 +766,8 @@ function FindingDetail({
   meta?: FindingMeta | null;
   attachedSnippet: { before: string; match: string; after: string } | null;
   onAccept: () => void;
+  onAcceptOption?: (optionIndex: number) => void;
+  acceptedOptionIndex?: number;
   onIgnore: () => void;
   onOpenModal: () => void;
   onJumpToInSource?: () => void;
@@ -680,6 +777,11 @@ function FindingDetail({
 }) {
   const comment = showFull ? finding.comment : finding.comment.slice(0, 300) + (finding.comment.length > 300 ? "…" : "");
   const applyable = meta?.hasPatch !== false;
+  const hasMultipleOptions = meta?.patchOptions && meta.patchOptions.length > 1;
+  const showSingleAccept = applyable && !hasMultipleOptions;
+  // #region agent log
+  fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RevisionBuddyObsidianUI.tsx:FindingDetail',message:'detail render',data:{index,applyable,hasMultipleOptions,suggestionsLength:meta?.suggestions?.length ?? 0,patchOptionsLength:meta?.patchOptions?.length ?? 0,disabledAccept,showSingleAccept},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+  // #endregion
   return (
     <>
       <div style={styles.comment}>{comment}</div>
@@ -717,10 +819,33 @@ function FindingDetail({
       ) : (
         <div style={styles.attachedLabel}>Not found in current document (wrong file or already changed).</div>
       )}
-      {applyable && (
+      {applyable && !hasMultipleOptions && (
         <div style={styles.preview}>
           <div>from: {finding.patch.from}</div>
           <div style={styles.fromTo}>to: {finding.patch.to}</div>
+        </div>
+      )}
+      {hasMultipleOptions && meta.patchOptions && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={styles.metaLabel}>Choose a fix:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {meta.patchOptions.map((opt, optIdx) => (
+              <div key={optIdx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <button
+                  type="button"
+                  style={{ ...styles.btn, ...styles.btnAccept }}
+                  onClick={() => onAcceptOption?.(optIdx)}
+                  disabled={disabledAccept || acceptedOptionIndex !== undefined}
+                  aria-label={opt.label}
+                >
+                  {opt.label}
+                </button>
+                <div style={{ ...styles.preview, padding: "6px 8px", fontSize: "max(0.9375rem, var(--font-ui-small))" }}>
+                  to: {opt.patch.to.length > 80 ? opt.patch.to.slice(0, 80) + "…" : opt.patch.to}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {!applyable && (
@@ -736,7 +861,7 @@ function FindingDetail({
             Go to in document
           </button>
         )}
-        {applyable && (
+        {showSingleAccept && (
           <button
             type="button"
             style={{ ...styles.btn, ...styles.btnAccept }}

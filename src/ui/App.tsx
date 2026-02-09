@@ -143,6 +143,7 @@ export function App(props: AppProps) {
           findingMeta={withMeta.findingMeta}
           initialAcceptedIndices={persistedState?.acceptedIndices}
           initialIgnoredIndices={persistedState?.ignoredIndices}
+          initialAcceptedOptionByIndex={persistedState?.acceptedOptionByIndex}
           rawJson={rawJson}
           onPersistState={onPersistState}
           onExportText={onExportText}

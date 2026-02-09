@@ -38,6 +38,10 @@ export interface DocComment {
   confidence?: string;
   /** Quote from the document to jump to when the user clicks this comment. */
   anchor_quote?: string;
+  /** Recommended edit (non–first-level doc comments should have this). Edit should change formatting (to !== from). */
+  patch?: { from: string; to: string };
+  /** Alternative text suggestions when no concrete patch is provided. */
+  suggestions?: string[];
 }
 
 export interface FindingLocation {
@@ -52,6 +56,12 @@ export interface FindingPatchV1 {
   risk?: string;
 }
 
+/** One alternative replacement for a finding; shared from/span come from the finding. */
+export interface FindingPatchOptionV1 {
+  label?: string;
+  to: string;
+}
+
 export interface FindingV1 {
   finding_id?: string;
   agent_id?: string;
@@ -64,6 +74,8 @@ export interface FindingV1 {
   tags?: string[];
   suggestions?: string[];
   patch?: FindingPatchV1;
+  /** Multiple fix options (Option A / Option B); each has `to`, shared from/span from location or patch. */
+  patch_options?: FindingPatchOptionV1[];
 }
 
 export interface RbSessionV1 {
@@ -76,6 +88,12 @@ export interface RbSessionV1 {
   findings?: FindingV1[];
 }
 
+/** One clickable option with a full patch (same from/span, different to). */
+export interface PatchOption {
+  label: string;
+  patch: Patch;
+}
+
 // Extended metadata per finding (from v1 normalization).
 export interface FindingMeta {
   rationale?: string;
@@ -85,6 +103,8 @@ export interface FindingMeta {
   tags?: string[];
   /** If false, finding is suggestion-only (no Accept). */
   hasPatch?: boolean;
+  /** When present with length > 1, UI shows Option A / Option B etc.; each has a full patch. */
+  patchOptions?: PatchOption[];
 }
 
 export interface SessionWithMeta {
@@ -101,6 +121,8 @@ export interface PersistedSessionState {
   rawJson: string;
   acceptedIndices: number[];
   ignoredIndices: number[];
+  /** For multi-option findings: finding index -> chosen option index. Persist as string-keyed record. */
+  acceptedOptionByIndex?: Record<string, number>;
 }
 
 function isRbSessionV1(obj: Record<string, unknown>): boolean {
@@ -159,17 +181,50 @@ function parseRbSessionV1Format(obj: Record<string, unknown>): ParseSessionResul
     const loc = finding.location as Record<string, unknown> | undefined;
     const anchor = loc && typeof loc.anchor_quote === "string" ? loc.anchor_quote : "";
     const patchObj = finding.patch as Record<string, unknown> | undefined;
-    const hasPatch = patchObj && typeof patchObj.from === "string" && typeof patchObj.to === "string";
+    const hasSinglePatch = patchObj && typeof patchObj.from === "string" && typeof patchObj.to === "string";
+    const rawPatchOptions = Array.isArray(finding.patch_options) ? finding.patch_options : [];
+
+    const fromStr =
+      hasSinglePatch && patchObj
+        ? (patchObj.from as string)
+        : anchor || "";
+    const spanStr =
+      hasSinglePatch && patchObj && typeof patchObj.span === "string"
+        ? (patchObj.span as string)
+        : anchor || undefined;
 
     let patch: Patch;
-    if (hasPatch && patchObj) {
+    if (hasSinglePatch && patchObj) {
       patch = {
         from: patchObj.from as string,
         to: patchObj.to as string,
-        span: typeof patchObj.span === "string" ? (patchObj.span as string) : anchor || undefined,
+        span: spanStr,
       };
     } else {
-      patch = { from: anchor, to: anchor, span: anchor || undefined };
+      patch = { from: fromStr, to: fromStr, span: spanStr };
+    }
+
+    const patchOptions: { label: string; patch: Patch }[] = [];
+    if (rawPatchOptions.length > 0 && fromStr) {
+      const optionLabels = ["Option A", "Option B", "Option C", "Option D", "Option E"];
+      for (let o = 0; o < rawPatchOptions.length; o++) {
+        const opt = rawPatchOptions[o];
+        if (opt === null || typeof opt !== "object" || Array.isArray(opt)) continue;
+        const toVal = (opt as Record<string, unknown>).to;
+        if (typeof toVal !== "string") continue;
+        const label =
+          typeof (opt as Record<string, unknown>).label === "string"
+            ? ((opt as Record<string, unknown>).label as string)
+            : optionLabels[o] ?? `Option ${o + 1}`;
+        patchOptions.push({
+          label,
+          patch: { from: fromStr, to: toVal, span: spanStr },
+        });
+      }
+    }
+
+    if (patchOptions.length > 0 && !hasSinglePatch) {
+      patch = patchOptions[0].patch;
     }
 
     findings.push({
@@ -191,6 +246,7 @@ function parseRbSessionV1Format(obj: Record<string, unknown>): ParseSessionResul
         if (typeof t === "string") tags.push(t);
       }
     }
+    const hasPatch = hasSinglePatch || patchOptions.length > 0;
     findingMeta.push({
       rationale: typeof finding.rationale === "string" ? finding.rationale : undefined,
       tradeoff: typeof finding.tradeoff === "string" ? finding.tradeoff : undefined,
@@ -198,6 +254,7 @@ function parseRbSessionV1Format(obj: Record<string, unknown>): ParseSessionResul
       agent_id: typeof finding.agent_id === "string" ? finding.agent_id : undefined,
       tags: tags.length ? tags : undefined,
       hasPatch,
+      patchOptions: patchOptions.length > 1 ? patchOptions : undefined,
     });
   }
 
@@ -209,9 +266,30 @@ function parseRbSessionV1Format(obj: Record<string, unknown>): ParseSessionResul
   const docComments: DocComment[] = [];
   if (Array.isArray(obj.doc_comments)) {
     for (const dc of obj.doc_comments) {
-      if (dc !== null && typeof dc === "object" && !Array.isArray(dc)) {
-        docComments.push(dc as DocComment);
+      if (dc === null || typeof dc !== "object" || Array.isArray(dc)) continue;
+      const d = dc as Record<string, unknown>;
+      const patchObj = d.patch as Record<string, unknown> | undefined;
+      const hasPatch =
+        patchObj &&
+        typeof patchObj.from === "string" &&
+        typeof patchObj.to === "string" &&
+        (patchObj.to as string) !== (patchObj.from as string);
+      const suggestions: string[] = [];
+      if (Array.isArray(d.suggestions)) {
+        for (const s of d.suggestions) {
+          if (typeof s === "string") suggestions.push(s);
+        }
       }
+      docComments.push({
+        agent_id: typeof d.agent_id === "string" ? d.agent_id : undefined,
+        severity: typeof d.severity === "string" ? d.severity : undefined,
+        comment: typeof d.comment === "string" ? d.comment : undefined,
+        rationale: typeof d.rationale === "string" ? d.rationale : undefined,
+        confidence: typeof d.confidence === "string" ? d.confidence : undefined,
+        anchor_quote: typeof d.anchor_quote === "string" ? d.anchor_quote : undefined,
+        patch: hasPatch ? { from: patchObj!.from as string, to: patchObj!.to as string } : undefined,
+        suggestions: suggestions.length ? suggestions : undefined,
+      });
     }
   }
 

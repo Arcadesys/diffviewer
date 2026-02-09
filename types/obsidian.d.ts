@@ -30,6 +30,11 @@ declare module "obsidian" {
     onClose(): Promise<void>;
   }
 
+  export class MarkdownView extends ItemView {
+    editor: Editor;
+    file: TFile | null;
+  }
+
   export class TAbstractFile {}
 
   export class TFile extends TAbstractFile {
@@ -41,6 +46,23 @@ declare module "obsidian" {
   export class TFolder extends TAbstractFile {
     path: string;
     name: string;
+  }
+
+  export interface EditorPosition {
+    line: number;
+    ch: number;
+  }
+
+  export interface Editor {
+    getValue(): string;
+    getSelection(): string;
+    getCursor(side?: "from" | "to"): EditorPosition;
+    getLine(line: number): string;
+    replaceSelection(replacement: string): void;
+    replaceRange(replacement: string, from: EditorPosition, to?: EditorPosition): void;
+    offsetToPos(offset: number): EditorPosition;
+    setSelection(from: EditorPosition, to: EditorPosition): void;
+    scrollIntoView(range: { from: EditorPosition; to: EditorPosition }, center?: boolean): void;
   }
 
   export interface DataAdapter {
@@ -60,6 +82,7 @@ declare module "obsidian" {
     id: string;
     name: string;
     callback?: () => void;
+    editorCallback?: (editor: Editor, view: MarkdownView) => void;
     checkCallback?: (checking: boolean) => boolean;
   }
 
@@ -78,8 +101,37 @@ declare module "obsidian" {
     manifest: PluginManifest;
     addCommand(command: Command): void;
     addRibbonIcon(icon: string, title: string, callback: (evt: MouseEvent) => void): HTMLElement;
+    addSettingTab(tab: PluginSettingTab): void;
     registerView(type: string, callback: (leaf: WorkspaceLeaf) => ItemView): void;
     loadData<T>(): Promise<T | undefined>;
     saveData(data: unknown): Promise<void>;
+  }
+
+  export class PluginSettingTab {
+    constructor(plugin: Plugin);
+    containerEl: HTMLElement;
+    display(): void;
+  }
+
+  export class Setting {
+    constructor(containerEl: HTMLElement);
+    setName(name: string): this;
+    setDesc(desc: string): this;
+    addText(cb: (text: TextComponent) => void): this;
+    addDropdown(cb: (dropdown: DropdownComponent) => void): this;
+  }
+
+  export interface TextComponent {
+    setPlaceholder(placeholder: string): this;
+    setValue(value: string): this;
+    getValue(): string;
+    onChange(callback: (value: string) => void): this;
+    inputEl: HTMLInputElement;
+  }
+
+  export interface DropdownComponent {
+    setValue(value: string): this;
+    getValue(): string;
+    onChange(callback: (value: string) => void): this;
   }
 }

@@ -3,6 +3,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { StrictMode, createElement } from "react";
 import { App } from "./src/ui/App";
 import type { PersistedSessionState } from "./src/types";
+import {
+  loadQuickFixSettings,
+  RevisionBuddySettingTab,
+  type QuickFixSettings,
+  DEFAULT_QUICK_FIX_SETTINGS,
+} from "./src/settings";
+import { requestQuickFix } from "./src/quickFix";
 
 /** Minimal type for Obsidian editor's CodeMirror view — used only to read doc and coords (no CM bundle). */
 interface EditorCM {
@@ -286,6 +293,9 @@ export default class RevisionBuddyPlugin extends Plugin {
   private resizeDebounceId: ReturnType<typeof setTimeout> | null = null;
   private static readonly RESIZE_DEBOUNCE_MS = 80;
 
+  /** Fast, cheap LLM layer for line-level quick fix. */
+  private quickFixSettings: QuickFixSettings = { ...DEFAULT_QUICK_FIX_SETTINGS };
+
   getHighlightState(): { path: string | null; spans: string[]; focusSpan: string | null } {
     return { path: this.highlightPath, spans: this.highlightSpans, focusSpan: this.focusHighlightSpan };
   }
@@ -341,10 +351,18 @@ export default class RevisionBuddyPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
+    this.quickFixSettings = await loadQuickFixSettings(this.loadData.bind(this));
     this.registerView(REVISION_BUDDY_VIEW_TYPE, (leaf) => new RevisionBuddyView(leaf, this));
     this.addStyles();
     this.resizeHandler = () => this.onResize();
     window.addEventListener("resize", this.resizeHandler);
+    this.addSettingTab(
+      new RevisionBuddySettingTab(
+        this as Plugin & { loadData: () => Promise<Record<string, unknown> | undefined>; saveData: (data: unknown) => Promise<void> },
+        () => this.quickFixSettings,
+        (s) => { this.quickFixSettings = s; }
+      )
+    );
     this.addCommand({
       id: "open-revision-buddy",
       name: "Open Revision Buddy",
@@ -362,6 +380,56 @@ export default class RevisionBuddyPlugin extends Plugin {
             new Notice("Paste into the Session JSON field in the panel");
           }).catch(() => {});
         });
+      },
+    });
+
+    this.addCommand({
+      id: "quick-fix-selection",
+      name: "Quick fix selection (fast LLM)",
+      editorCallback: (editor, view) => {
+        let text = editor.getSelection();
+        let replaceBySelection = true; // if false, we'll use replaceRange for the current line
+        if (!text.trim()) {
+          const cursor = editor.getCursor();
+          const line = editor.getLine(cursor.line);
+          if (!line.trim()) {
+            new Notice("Select text or place cursor on a line to fix");
+            return;
+          }
+          text = line;
+          replaceBySelection = false;
+        }
+        const config = {
+          provider: this.quickFixSettings.provider,
+          apiKey: this.quickFixSettings.apiKey,
+          model: this.quickFixSettings.model || (this.quickFixSettings.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash"),
+        };
+        if (!config.apiKey.trim()) {
+          new Notice("Set Quick fix API key in Settings → Revision Buddy");
+          return;
+        }
+        new Notice("Quick fix…");
+        const cursor = editor.getCursor();
+        const lineNum = cursor.line;
+        requestQuickFix(config, { text })
+          .then((res) => {
+            if (res.ok) {
+              const toUse = res.to;
+              if (replaceBySelection) {
+                editor.replaceSelection(toUse);
+              } else {
+                const from = { line: lineNum, ch: 0 };
+                const to = { line: lineNum, ch: editor.getLine(lineNum).length };
+                editor.replaceRange(toUse, from, to);
+              }
+              new Notice("Quick fix applied");
+            } else {
+              new Notice(res.reason);
+            }
+          })
+          .catch((err) => {
+            new Notice(String(err?.message ?? err));
+          });
       },
     });
 
