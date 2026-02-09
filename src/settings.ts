@@ -11,7 +11,7 @@ export interface AutoFixSettings {
 export const DEFAULT_AUTO_FIX_SETTINGS: AutoFixSettings = {
   provider: "openai",
   apiKey: "",
-  model: "gpt-4o-mini",
+  model: "gpt-5-nano",
 };
 
 const SETTINGS_KEY = "autoFix";
@@ -68,7 +68,7 @@ export class RevisionBuddySettingTab extends PluginSettingTab {
 
     this.containerEl.createEl("h2", { text: "Auto-fix (fast LLM layer)" });
     this.containerEl.createEl("p", {
-      text: "Line-level “press-button-to-fix” uses a fast, cheap model (e.g. Haiku 4.5, Gemini Flash). Configure provider and API key below.",
+      text: "Line-level “press-button-to-fix” uses a fast, cheap model (e.g. GPT-5 nano, Gemini Flash). Configure provider and API key below.",
       cls: "setting-item-description",
     });
 
@@ -77,7 +77,7 @@ export class RevisionBuddySettingTab extends PluginSettingTab {
       .setDesc("API to use for auto-fix")
       .addDropdown((dropdown) => {
         dropdown
-          .addOption("openai", "OpenAI (e.g. gpt-4o-mini, gpt-4.5-haiku)")
+          .addOption("openai", "OpenAI (e.g. gpt-5-nano, gpt-5-mini)")
           .addOption("google", "Google (e.g. gemini-2.0-flash)")
           .setValue(s.provider)
           .onChange(async (value) => {
@@ -112,15 +112,15 @@ export class RevisionBuddySettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName("Model")
-      .setDesc("Model id, e.g. gpt-4o-mini, gpt-4.5-haiku, gemini-2.0-flash-exp")
+      .setDesc("Model id, e.g. gpt-5-nano, gpt-5-mini, gemini-2.0-flash-exp")
       .addText((text) => {
         text
-          .setPlaceholder(s.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash")
+          .setPlaceholder(s.provider === "openai" ? "gpt-5-nano" : "gemini-2.0-flash")
           .setValue(s.model)
           .onChange(async (value) => {
             const next = {
               ...s,
-              model: value.trim() || (s.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash"),
+              model: value.trim() || (s.provider === "openai" ? "gpt-5-nano" : "gemini-2.0-flash"),
             };
             this.setSettings(next);
             await saveAutoFixSettings(

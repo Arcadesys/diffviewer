@@ -1,6 +1,6 @@
 /**
  * Auto-fix: fast, cheap LLM layer for line-level "press-button-to-fix" workflows.
- * Designed for models like Claude Haiku 4.5, Gemini Flash 3, etc.
+ * Designed for models like GPT-5 nano, Gemini Flash, etc.
  */
 
 export type AutoFixProviderId = "openai" | "google";
@@ -8,7 +8,7 @@ export type AutoFixProviderId = "openai" | "google";
 export interface AutoFixConfig {
   provider: AutoFixProviderId;
   apiKey: string;
-  /** Model identifier, e.g. "gpt-4.5-haiku", "gemini-2.0-flash-exp" */
+  /** Model identifier, e.g. "gpt-5-nano", "gemini-2.0-flash" */
   model: string;
 }
 
@@ -18,6 +18,8 @@ export interface AutoFixRequest {
   /** Optional: surrounding lines or document context for coherence. */
   contextBefore?: string;
   contextAfter?: string;
+  /** Optional: hint from a previous review (e.g. suggestion-only finding) so the fast model can try to incorporate it. */
+  suggestionHint?: string;
 }
 
 /** Successful response: a single minimal edit. */

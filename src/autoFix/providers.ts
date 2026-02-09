@@ -7,6 +7,9 @@ If the text needs no change, set "to" equal to "from".`;
 
 function buildUserMessage(req: AutoFixRequest): string {
   const parts: string[] = [];
+  if (req.suggestionHint) {
+    parts.push("Suggestion from a previous review (try to incorporate if applicable):\n" + req.suggestionHint);
+  }
   if (req.contextBefore) {
     parts.push("Context before:\n" + req.contextBefore);
   }
@@ -43,7 +46,7 @@ export async function autoFixOpenAI(
   }
   const url = "https://api.openai.com/v1/chat/completions";
   const body = {
-    model: config.model || "gpt-4o-mini",
+    model: config.model || "gpt-5-nano",
     messages: [
       { role: "system", content: AUTO_FIX_SYSTEM },
       { role: "user", content: buildUserMessage(req) },

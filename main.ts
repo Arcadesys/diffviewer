@@ -10,6 +10,7 @@ import {
   DEFAULT_AUTO_FIX_SETTINGS,
 } from "./src/settings";
 import { requestAutoFix } from "./src/autoFix";
+import { applyPatch } from "./src/patchApply";
 
 /** Minimal type for Obsidian editor's CodeMirror view — used only to read doc and coords (no CM bundle). */
 interface EditorCM {
@@ -263,6 +264,12 @@ class RevisionBuddyView extends ItemView {
           onJumpToInSource: (searchText: string, fallback?: string) => this.jumpToInSource(searchText, fallback),
           onHighlightInSource: (span: string | null) => this.plugin.setFocusHighlight(span),
           onSessionChange: (path: string, spans: string[]) => this.plugin.setHighlightRanges(path || null, spans),
+          onQuickRevision: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => {
+            this.jumpToInSource(spanText, fallbackSearchText);
+            setTimeout(() => this.plugin.runAutoFixOnSelection(suggestionContext), 400);
+          },
+          onApplySuggestion: (spanText: string, replacementText: string) =>
+            this.plugin.applySuggestionToSource(persistKey, spanText, replacementText),
         })
       )
     );
@@ -328,8 +335,97 @@ export default class RevisionBuddyPlugin extends Plugin {
     this.refreshHighlightInEditor();
   }
 
+  /**
+   * Run the fast (nano) auto-fix model on the current editor selection (or current line).
+   * Used by "Ask for quick revision" from suggestion-only findings.
+   */
+  async runAutoFixOnSelection(suggestionHint?: string): Promise<void> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view) {
+      new Notice("Open a note and go to the text first");
+      return;
+    }
+    const editor = view.editor;
+    let text = editor.getSelection();
+    let replaceBySelection = true;
+    if (!text.trim()) {
+      const cursor = editor.getCursor();
+      const line = editor.getLine(cursor.line);
+      if (!line.trim()) {
+        new Notice("Select text or place cursor on a line to fix");
+        return;
+      }
+      text = line;
+      replaceBySelection = false;
+    }
+    const config = {
+      provider: this.autoFixSettings.provider,
+      apiKey: this.autoFixSettings.apiKey,
+      model: this.autoFixSettings.model || (this.autoFixSettings.provider === "openai" ? "gpt-5-nano" : "gemini-2.0-flash"),
+    };
+    if (!config.apiKey.trim()) {
+      new Notice("Set Auto-fix API key in Settings → Revision Buddy");
+      return;
+    }
+    new Notice("Quick revision…");
+    const cursor = editor.getCursor();
+    const lineNum = cursor.line;
+    try {
+      const res = await requestAutoFix(config, { text, suggestionHint: suggestionHint?.trim() || undefined });
+      if (res.ok) {
+        const toUse = res.to;
+        if (replaceBySelection) {
+          editor.replaceSelection(toUse);
+        } else {
+          const from = { line: lineNum, ch: 0 };
+          const to = { line: lineNum, ch: editor.getLine(lineNum).length };
+          editor.replaceRange(toUse, from, to);
+        }
+        new Notice("Quick revision applied");
+      } else {
+        new Notice(res.reason);
+      }
+    } catch (err) {
+      new Notice(String((err as Error)?.message ?? err));
+    }
+  }
+
   setLastExportedText(text: string, path: string): void {
     this.lastExported = { text, path };
+  }
+
+  /**
+   * Apply a suggestion as a replacement in the source file: find spanText, replace with replacementText.
+   * Uses same single-occurrence rule as patchApply. Returns true if applied.
+   */
+  async applySuggestionToSource(filePath: string, spanText: string, replacementText: string): Promise<boolean> {
+    if (!filePath?.trim() || !spanText) {
+      new Notice("No file or span to apply");
+      return false;
+    }
+    const file = this.app.vault.getFileByPath(filePath);
+    if (!file) {
+      new Notice("Source file not found");
+      return false;
+    }
+    try {
+      const text = await this.app.vault.read(file);
+      const result = applyPatch(text, {
+        from: spanText,
+        to: replacementText,
+        span: spanText,
+      });
+      if (!result.ok) {
+        new Notice(result.reason);
+        return false;
+      }
+      await this.app.vault.modify(file, result.text);
+      new Notice("Applied to document");
+      return true;
+    } catch (err) {
+      new Notice(String((err as Error)?.message ?? err));
+      return false;
+    }
   }
 
   async getPersistedState(persistKey: string): Promise<PersistedSessionState | null> {
@@ -402,7 +498,7 @@ export default class RevisionBuddyPlugin extends Plugin {
         const config = {
           provider: this.autoFixSettings.provider,
           apiKey: this.autoFixSettings.apiKey,
-          model: this.autoFixSettings.model || (this.autoFixSettings.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash"),
+          model: this.autoFixSettings.model || (this.autoFixSettings.provider === "openai" ? "gpt-5-nano" : "gemini-2.0-flash"),
         };
         if (!config.apiKey.trim()) {
           new Notice("Set Auto-fix API key in Settings → Revision Buddy");

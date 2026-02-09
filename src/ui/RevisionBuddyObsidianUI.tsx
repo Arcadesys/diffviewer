@@ -285,6 +285,34 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-normal)",
     minWidth: "4ch",
   },
+  tabBar: {
+    display: "flex",
+    gap: "0",
+    borderBottom: "1px solid var(--background-modifier-border)",
+    flexShrink: 0,
+  },
+  tab: {
+    padding: "8px 14px",
+    border: "none",
+    borderBottom: "2px solid transparent",
+    backgroundColor: "transparent",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    fontSize: "max(0.9375rem, var(--font-ui-small))",
+    fontWeight: 500,
+  },
+  tabActive: {
+    color: "var(--text-normal)",
+    borderBottomColor: "var(--interactive-accent)",
+  },
+  tabPanel: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
 };
 
 export interface RevisionBuddyObsidianUIProps {
@@ -306,6 +334,10 @@ export interface RevisionBuddyObsidianUIProps {
   onToast?: (message: string) => void;
   onJumpToInSource?: (searchText: string, fallbackSearchText?: string) => void;
   onHighlightInSource?: (span: string | null) => void;
+  /** When present, suggestion-only findings show "Ask for quick revision" (jump + nano model). */
+  onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
+  /** Apply a suggestion to the source file (Option A / B from suggestions array). */
+  onApplySuggestion?: (spanText: string, replacementText: string) => void | Promise<void>;
 }
 
 function getAllAcceptedIndices(acceptedIndices: Set<number>, acceptedOptionByIndex: Record<number, number>): Set<number> {
@@ -386,6 +418,8 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     onToast,
     onJumpToInSource,
     onHighlightInSource,
+    onQuickRevision,
+    onApplySuggestion,
   } = props;
   const findings = session.findings;
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(() => new Set(initialAcceptedIndices ?? []));
@@ -407,8 +441,8 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     return Math.min(Math.max(0, raw), n - 1);
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
-  const [docCommentsCollapsed, setDocCommentsCollapsed] = useState(false);
+  type TabId = "summary" | "comments" | "line-edits";
+  const [activeTab, setActiveTab] = useState<TabId>("line-edits");
   const [expandedDocCommentIndex, setExpandedDocCommentIndex] = useState<number | null>(null);
 
   // Clamp selected index when session has fewer findings (e.g. different file or reload)
@@ -528,215 +562,266 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         </div>
       )}
 
-      {summary && (summary.big_picture || summary.what_improved?.length || summary.top_risks?.length || summary.recommended_next_pass) && (
-        <div style={styles.summarySection}>
-          <div
-            style={styles.summaryHeader}
-            onClick={() => setSummaryCollapsed((c) => !c)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && setSummaryCollapsed((c) => !c)}
-          >
-            {summaryCollapsed ? "▶ Summary" : "▼ Summary"}
-          </div>
-          {!summaryCollapsed && (
-            <div style={styles.summaryBody}>
-              {summary.big_picture && (
-                <p style={styles.summaryParagraph}>{summary.big_picture}</p>
-              )}
-              {summary.what_improved && summary.what_improved.length > 0 && (
-                <>
-                  <div style={styles.summaryListTitle}>What improved</div>
-                  <ul style={styles.summaryList}>
-                    {summary.what_improved.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {summary.top_risks && summary.top_risks.length > 0 && (
-                <>
-                  <div style={styles.summaryListTitle}>Top risks</div>
-                  <ul style={styles.summaryList}>
-                    {summary.top_risks.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {summary.recommended_next_pass && (
-                <p style={styles.summaryParagraph}>{summary.recommended_next_pass}</p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {doc_comments && doc_comments.length > 0 && (
-        <div style={styles.docCommentsSection}>
-          <div
-            style={styles.docCommentsHeader}
-            onClick={() => setDocCommentsCollapsed((c) => !c)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && setDocCommentsCollapsed((c) => !c)}
-          >
-            {docCommentsCollapsed ? "▶ Doc comments" : "▼ Doc comments"}
-          </div>
-          {!docCommentsCollapsed && (
-            <div style={styles.docCommentsBody}>
-              {doc_comments.map((dc, i) => {
-                const isExpanded = expandedDocCommentIndex === i;
-                const handleClick = () => {
-                  if (isExpanded) {
-                    setExpandedDocCommentIndex(null);
-                    onHighlightInSource?.(null);
-                  } else {
-                    setExpandedDocCommentIndex(i);
-                    if (dc.anchor_quote) {
-                      onJumpToInSource?.(dc.anchor_quote);
-                      onHighlightInSource?.(dc.anchor_quote);
-                    } else {
-                      onHighlightInSource?.(null);
-                    }
-                  }
-                };
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      ...styles.docCommentItem,
-                      ...(isExpanded ? styles.docCommentItemExpanded : {}),
-                      cursor: "pointer",
-                    }}
-                    onClick={handleClick}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && handleClick()}
-                  >
-                    <div style={styles.docCommentAgent}>
-                      {dc.agent_id ?? "Agent"}
-                      {dc.severity && (
-                        <span
-                          style={{
-                            ...styles.docCommentSeverity,
-                            ...(dc.severity === "important" ? styles.severityImportant : styles.severitySuggestion),
-                          }}
-                        >
-                          {dc.severity}
-                        </span>
-                      )}
-                    </div>
-                    {dc.comment && <div style={styles.comment}>{dc.comment}</div>}
-                    {dc.rationale && (
-                      <div style={{ ...styles.metaLabel, marginTop: "4px" }}>{dc.rationale}</div>
-                    )}
-                    {dc.confidence && (
-                      <div style={styles.metaLabel}>Confidence: {dc.confidence}</div>
-                    )}
-                    {!dc.anchor_quote ? null : (dc.patch || (dc.suggestions && dc.suggestions.length > 0)) ? (
-                      <>
-                        <div style={{ ...styles.metaLabel, marginTop: "6px" }}>Recommended edit</div>
-                        {dc.patch && (
-                          <div style={styles.preview}>
-                            <div>from: {dc.patch.from}</div>
-                            <div style={styles.fromTo}>to: {dc.patch.to}</div>
-                          </div>
-                        )}
-                        {dc.suggestions && dc.suggestions.length > 0 && (
-                          <ul style={styles.suggestionsList}>
-                            {dc.suggestions.map((s, si) => (
-                              <li key={si}>{s}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </>
-                    ) : null}
-                    <div style={{ ...styles.metaLabel, marginTop: "6px", color: "var(--interactive-accent)" }}>
-                      {isExpanded
-                        ? "Click to collapse"
-                        : dc.anchor_quote
-                          ? "Click to expand and go to in document"
-                          : "Click to expand"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {findings.length === 0 ? (
-        <div style={styles.singleFindingCard}>
-          <div style={styles.comment}>No findings to review.</div>
-        </div>
-      ) : (
-        <>
-          <div style={styles.navRow}>
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+        <div style={styles.tabBar} role="tablist" aria-label="Summary, comments, and line edits">
+          {(["summary", "comments", "line-edits"] as const).map((tabId) => (
             <button
+              key={tabId}
               type="button"
-              style={{ ...styles.btn, ...styles.btnIgnore }}
-              onClick={() => setSelectedFindingIndex((i) => Math.max(0, i - 1))}
-              disabled={selectedFindingIndex <= 0}
-              aria-label="Previous finding"
+              role="tab"
+              aria-selected={activeTab === tabId}
+              aria-controls={`panel-${tabId}`}
+              id={`tab-${tabId}`}
+              style={{
+                ...styles.tab,
+                ...(activeTab === tabId ? styles.tabActive : {}),
+              }}
+              onClick={() => setActiveTab(tabId)}
             >
-              Previous
+              {tabId === "summary" ? "Summary" : tabId === "comments" ? "Comments" : "Line edits"}
             </button>
-            <span style={styles.navLabel} aria-live="polite">
-              {selectedFindingIndex + 1} of {findings.length}
-            </span>
-            <button
-              type="button"
-              style={{ ...styles.btn, ...styles.btnIgnore }}
-              onClick={() => setSelectedFindingIndex((i) => Math.min(findings.length - 1, i + 1))}
-              disabled={selectedFindingIndex >= findings.length - 1}
-              aria-label="Next finding"
-            >
-              Next
-            </button>
-          </div>
-          {currentFinding && (
-            <div style={styles.singleFindingCard}>
-              <FindingDetail
-                finding={currentFinding}
-                index={selectedFindingIndex}
-                meta={findingMeta?.[selectedFindingIndex]}
-                attachedSnippet={getSnippetWithMatch(
-                  getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, selectedFindingIndex),
-                  currentFinding.patch.span ?? currentFinding.patch.from
+          ))}
+        </div>
+        <div
+          id="panel-summary"
+          role="tabpanel"
+          aria-labelledby="tab-summary"
+          hidden={activeTab !== "summary"}
+          style={{ ...styles.tabPanel, ...(activeTab !== "summary" ? { display: "none" } : {}) }}
+        >
+          {summary && (summary.big_picture || summary.what_improved?.length || summary.top_risks?.length || summary.recommended_next_pass) ? (
+            <div style={styles.summarySection}>
+              <div style={{ ...styles.summaryBody, maxHeight: "none" }}>
+                {summary.big_picture && (
+                  <p style={styles.summaryParagraph}>{summary.big_picture}</p>
                 )}
-                onAccept={() => handleAccept(selectedFindingIndex)}
-                onAcceptOption={
-                  findingMeta?.[selectedFindingIndex]?.patchOptions && findingMeta[selectedFindingIndex].patchOptions!.length > 1
-                    ? (optionIndex) => handleAcceptOption(selectedFindingIndex, optionIndex)
-                    : undefined
-                }
-                acceptedOptionIndex={acceptedOptionByIndex[selectedFindingIndex]}
-                onIgnore={() => handleIgnore(selectedFindingIndex)}
-                onOpenModal={() => {}}
-                onJumpToInSource={
-                  onJumpToInSource
-                    ? () => {
-                        const primary = currentFinding.patch.span ?? currentFinding.patch.from;
-                        const fallback = primary !== currentFinding.patch.from ? currentFinding.patch.from : undefined;
-                        onJumpToInSource(primary, fallback);
-                      }
-                    : undefined
-                }
-                disabledAccept={
-                  acceptedIndices.has(selectedFindingIndex) ||
-                  ignoredIndices.has(selectedFindingIndex) ||
-                  acceptedOptionByIndex[selectedFindingIndex] !== undefined ||
-                  !canAcceptFinding(selectedFindingIndex)
-                }
-                disabledIgnore={acceptedIndices.has(selectedFindingIndex) || ignoredIndices.has(selectedFindingIndex)}
-                showFull
-              />
+                {summary.what_improved && summary.what_improved.length > 0 && (
+                  <>
+                    <div style={styles.summaryListTitle}>What improved</div>
+                    <ul style={styles.summaryList}>
+                      {summary.what_improved.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {summary.top_risks && summary.top_risks.length > 0 && (
+                  <>
+                    <div style={styles.summaryListTitle}>Top risks</div>
+                    <ul style={styles.summaryList}>
+                      {summary.top_risks.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {summary.recommended_next_pass && (
+                  <p style={styles.summaryParagraph}>{summary.recommended_next_pass}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={styles.singleFindingCard}>
+              <div style={styles.comment}>No summary available.</div>
             </div>
           )}
-        </>
-      )}
+        </div>
+        <div
+          id="panel-comments"
+          role="tabpanel"
+          aria-labelledby="tab-comments"
+          hidden={activeTab !== "comments"}
+          style={{ ...styles.tabPanel, ...(activeTab !== "comments" ? { display: "none" } : {}) }}
+        >
+          {doc_comments && doc_comments.length > 0 ? (
+            <div style={styles.docCommentsSection}>
+              <div style={{ ...styles.docCommentsBody, maxHeight: "none" }}>
+                {doc_comments.map((dc, i) => {
+                  const isExpanded = expandedDocCommentIndex === i;
+                  const handleClick = () => {
+                    if (isExpanded) {
+                      setExpandedDocCommentIndex(null);
+                      onHighlightInSource?.(null);
+                    } else {
+                      setExpandedDocCommentIndex(i);
+                      if (dc.anchor_quote) {
+                        onJumpToInSource?.(dc.anchor_quote);
+                        onHighlightInSource?.(dc.anchor_quote);
+                      } else {
+                        onHighlightInSource?.(null);
+                      }
+                    }
+                  };
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        ...styles.docCommentItem,
+                        ...(isExpanded ? styles.docCommentItemExpanded : {}),
+                        cursor: "pointer",
+                      }}
+                      onClick={handleClick}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+                    >
+                      <div style={styles.docCommentAgent}>
+                        {dc.agent_id ?? "Agent"}
+                        {dc.severity && (
+                          <span
+                            style={{
+                              ...styles.docCommentSeverity,
+                              ...(dc.severity === "important" ? styles.severityImportant : styles.severitySuggestion),
+                            }}
+                          >
+                            {dc.severity}
+                          </span>
+                        )}
+                      </div>
+                      {dc.comment && <div style={styles.comment}>{dc.comment}</div>}
+                      {dc.rationale && (
+                        <div style={{ ...styles.metaLabel, marginTop: "4px" }}>{dc.rationale}</div>
+                      )}
+                      {dc.confidence && (
+                        <div style={styles.metaLabel}>Confidence: {dc.confidence}</div>
+                      )}
+                      {!dc.anchor_quote ? null : (dc.patch || (dc.suggestions && dc.suggestions.length > 0)) ? (
+                        <>
+                          <div style={{ ...styles.metaLabel, marginTop: "6px" }}>Recommended edit</div>
+                          {dc.patch && (
+                            <div style={styles.preview}>
+                              <div>from: {dc.patch.from}</div>
+                              <div style={styles.fromTo}>to: {dc.patch.to}</div>
+                            </div>
+                          )}
+                          {dc.suggestions && dc.suggestions.length > 0 && (
+                            <ul style={styles.suggestionsList}>
+                              {dc.suggestions.map((s, si) => (
+                                <li key={si}>{s}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      ) : null}
+                      <div style={{ ...styles.metaLabel, marginTop: "6px", color: "var(--interactive-accent)" }}>
+                        {isExpanded
+                          ? "Click to collapse"
+                          : dc.anchor_quote
+                            ? "Click to expand and go to in document"
+                            : "Click to expand"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={styles.singleFindingCard}>
+              <div style={styles.comment}>No doc comments.</div>
+            </div>
+          )}
+        </div>
+        <div
+          id="panel-line-edits"
+          role="tabpanel"
+          aria-labelledby="tab-line-edits"
+          hidden={activeTab !== "line-edits"}
+          style={{ ...styles.tabPanel, ...(activeTab !== "line-edits" ? { display: "none" } : {}) }}
+        >
+          {findings.length === 0 ? (
+            <div style={styles.singleFindingCard}>
+              <div style={styles.comment}>No findings to review.</div>
+            </div>
+          ) : (
+            <>
+              <div style={styles.navRow}>
+                <button
+                  type="button"
+                  style={{ ...styles.btn, ...styles.btnIgnore }}
+                  onClick={() => setSelectedFindingIndex((i) => Math.max(0, i - 1))}
+                  disabled={selectedFindingIndex <= 0}
+                  aria-label="Previous finding"
+                >
+                  Previous
+                </button>
+                <span style={styles.navLabel} aria-live="polite">
+                  {selectedFindingIndex + 1} of {findings.length}
+                </span>
+                <button
+                  type="button"
+                  style={{ ...styles.btn, ...styles.btnIgnore }}
+                  onClick={() => setSelectedFindingIndex((i) => Math.min(findings.length - 1, i + 1))}
+                  disabled={selectedFindingIndex >= findings.length - 1}
+                  aria-label="Next finding"
+                >
+                  Next
+                </button>
+              </div>
+              {currentFinding && (
+                <div style={styles.singleFindingCard}>
+                  <FindingDetail
+                    finding={currentFinding}
+                    index={selectedFindingIndex}
+                    meta={findingMeta?.[selectedFindingIndex]}
+                    attachedSnippet={getSnippetWithMatch(
+                      getTextForFinding(initialText, session, acceptedIndices, findingMeta, acceptedOptionByIndex, selectedFindingIndex),
+                      currentFinding.patch.span ?? currentFinding.patch.from
+                    )}
+                    onAccept={() => handleAccept(selectedFindingIndex)}
+                    onAcceptOption={
+                      findingMeta?.[selectedFindingIndex]?.patchOptions && findingMeta[selectedFindingIndex].patchOptions!.length > 1
+                        ? (optionIndex) => handleAcceptOption(selectedFindingIndex, optionIndex)
+                        : undefined
+                    }
+                    acceptedOptionIndex={acceptedOptionByIndex[selectedFindingIndex]}
+                    onIgnore={() => handleIgnore(selectedFindingIndex)}
+                    onOpenModal={() => {}}
+                    onJumpToInSource={
+                      onJumpToInSource
+                        ? () => {
+                            const primary = currentFinding.patch.span ?? currentFinding.patch.from;
+                            const fallback = primary !== currentFinding.patch.from ? currentFinding.patch.from : undefined;
+                            onJumpToInSource(primary, fallback);
+                          }
+                        : undefined
+                    }
+                    onQuickRevision={
+                      onQuickRevision && !canAcceptFinding(selectedFindingIndex)
+                        ? () => {
+                            const primary = currentFinding.patch.span ?? currentFinding.patch.from;
+                            const fallback = primary !== currentFinding.patch.from ? currentFinding.patch.from : undefined;
+                            const suggestionParts: string[] = [currentFinding.comment];
+                            const meta = findingMeta?.[selectedFindingIndex];
+                            if (meta?.suggestions?.length) {
+                              suggestionParts.push(meta.suggestions.join(" "));
+                            }
+                            onQuickRevision(primary, fallback, suggestionParts.join("\n\n"));
+                          }
+                        : undefined
+                    }
+                    onApplySuggestion={
+                      onApplySuggestion && !canAcceptFinding(selectedFindingIndex)
+                        ? (replacementText: string) => {
+                            const spanText = currentFinding.patch.span ?? currentFinding.patch.from;
+                            onApplySuggestion(spanText, replacementText);
+                          }
+                        : undefined
+                    }
+                    disabledAccept={
+                      acceptedIndices.has(selectedFindingIndex) ||
+                      ignoredIndices.has(selectedFindingIndex) ||
+                      acceptedOptionByIndex[selectedFindingIndex] !== undefined ||
+                      !canAcceptFinding(selectedFindingIndex)
+                    }
+                    disabledIgnore={acceptedIndices.has(selectedFindingIndex) || ignoredIndices.has(selectedFindingIndex)}
+                    showFull
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -752,6 +837,8 @@ function FindingDetail({
   onIgnore,
   onOpenModal,
   onJumpToInSource,
+  onQuickRevision,
+  onApplySuggestion,
   disabledAccept,
   disabledIgnore,
   showFull,
@@ -766,6 +853,8 @@ function FindingDetail({
   onIgnore: () => void;
   onOpenModal: () => void;
   onJumpToInSource?: () => void;
+  onQuickRevision?: () => void;
+  onApplySuggestion?: (replacementText: string) => void;
   disabledAccept: boolean;
   disabledIgnore: boolean;
   showFull?: boolean;
@@ -801,11 +890,38 @@ function FindingDetail({
       {meta?.suggestions && meta.suggestions.length > 0 && (
         <>
           <div style={styles.metaLabel}>Suggestions</div>
-          <ul style={styles.suggestionsList}>
-            {meta.suggestions.map((s, i) => (
-              <li key={i}>{s}</li>
-            ))}
-          </ul>
+          {onApplySuggestion && meta.suggestions && meta.suggestions.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ ...styles.metaLabel, marginBottom: "4px" }}>Apply to document:</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {meta.suggestions.map((text, optIdx) => {
+                  const label = ["Option A", "Option B", "Option C", "Option D", "Option E"][optIdx] ?? `Option ${optIdx + 1}`;
+                  const preview = text.length > 80 ? text.slice(0, 80) + "…" : text;
+                  return (
+                    <div key={optIdx} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <button
+                        type="button"
+                        style={{ ...styles.btn, ...styles.btnAccept }}
+                        onClick={() => onApplySuggestion(text)}
+                        aria-label={label}
+                      >
+                        {label}
+                      </button>
+                      <div style={{ ...styles.preview, padding: "6px 8px", fontSize: "max(0.9375rem, var(--font-ui-small))" }}>
+                        {preview}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <ul style={styles.suggestionsList}>
+              {meta.suggestions.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          )}
         </>
       )}
       {attachedSnippet ? (
@@ -860,6 +976,15 @@ function FindingDetail({
             onClick={onJumpToInSource}
           >
             Go to in document
+          </button>
+        )}
+        {onQuickRevision && !applyable && (
+          <button
+            type="button"
+            style={{ ...styles.btn, ...styles.btnAccept }}
+            onClick={onQuickRevision}
+          >
+            Ask for quick revision
           </button>
         )}
         {showSingleAccept && (

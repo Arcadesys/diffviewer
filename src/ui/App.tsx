@@ -71,10 +71,14 @@ export interface AppProps {
   onJumpToInSource?: (searchText: string, fallbackSearchText?: string) => void;
   onHighlightInSource?: (span: string | null) => void;
   onSessionChange?: (path: string, spans: string[]) => void;
+  /** Jump to span in document and run fast (nano) model for a quick revision; used for suggestion-only findings. */
+  onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
+  /** Apply a suggestion as replacement in the source file (Option A / B from suggestions array). */
+  onApplySuggestion?: (spanText: string, replacementText: string) => void | Promise<void>;
 }
 
 export function App(props: AppProps) {
-  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onHighlightInSource, onSessionChange } = props;
+  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onHighlightInSource, onSessionChange, onQuickRevision, onApplySuggestion } = props;
   const [rawJson, setRawJson] = useState(persistedState?.rawJson ?? "");
   const [parseResult, setParseResult] = useState<ParseSessionResult | null>(null);
 
@@ -151,6 +155,8 @@ export function App(props: AppProps) {
           onToast={onToast}
           onJumpToInSource={onJumpToInSource}
           onHighlightInSource={onHighlightInSource}
+          onQuickRevision={onQuickRevision}
+          onApplySuggestion={onApplySuggestion}
         />
       )}
     </div>
