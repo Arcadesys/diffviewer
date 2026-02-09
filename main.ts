@@ -271,7 +271,7 @@ class RevisionBuddyView extends ItemView {
           onSessionChange: (path: string, spans: string[]) => this.plugin.setHighlightRanges(path || null, spans),
           onQuickRevision: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => {
             this.jumpToInSource(spanText, fallbackSearchText);
-            setTimeout(() => this.plugin.runAutoFixOnSelection(suggestionContext), 400);
+            setTimeout(() => this.plugin.runAutoFixOnSelection(suggestionContext, spanText, fallbackSearchText, true), 400);
           },
           onApplySuggestion: (spanText: string, replacementText: string, editJson?: ApplySuggestionEditJson) =>
             this.plugin.applySuggestionToSource(persistKey, spanText, replacementText, editJson),
@@ -305,6 +305,8 @@ export default class RevisionBuddyPlugin extends Plugin {
   private resizeHandler: (() => void) | null = null;
   private resizeDebounceId: ReturnType<typeof setTimeout> | null = null;
   private static readonly RESIZE_DEBOUNCE_MS = 80;
+  private static readonly EDIT_SHOWCASE_DELETE_MS = 40;
+  private static readonly EDIT_SHOWCASE_TYPE_MS = 35;
 
   /** Fast, cheap LLM layer for line-level auto-fix. */
   private autoFixSettings: AutoFixSettings = { ...DEFAULT_AUTO_FIX_SETTINGS };
@@ -341,19 +343,103 @@ export default class RevisionBuddyPlugin extends Plugin {
     this.refreshHighlightInEditor();
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async playEditShowcase(
+    editor: MarkdownView["editor"],
+    from: { line: number; ch: number },
+    to: { line: number; ch: number },
+    fromText: string,
+    toText: string
+  ): Promise<void> {
+    const startOffset = editor.posToOffset(from);
+    const endOffset = editor.posToOffset(to);
+    const deleteLen = Math.max(0, endOffset - startOffset);
+
+    editor.setSelection(from, to);
+    editor.scrollIntoView({ from, to }, true);
+    if (fromText.trim()) {
+      this.setFocusHighlight(fromText);
+    }
+    await this.sleep(280);
+
+    if (deleteLen > 0) {
+      const deleteSteps = Math.min(18, Math.max(6, Math.ceil(deleteLen / 8)));
+      const deleteChunk = Math.max(1, Math.ceil(deleteLen / deleteSteps));
+      for (let i = 0; i < deleteSteps; i++) {
+        const chunkEnd = endOffset - i * deleteChunk;
+        const chunkStart = Math.max(startOffset, chunkEnd - deleteChunk);
+        if (chunkEnd <= startOffset) break;
+        const chunkFrom = editor.offsetToPos(chunkStart);
+        const chunkTo = editor.offsetToPos(chunkEnd);
+        editor.replaceRange("", chunkFrom, chunkTo);
+        await this.sleep(RevisionBuddyPlugin.EDIT_SHOWCASE_DELETE_MS);
+      }
+    }
+
+    this.setFocusHighlight(null);
+    await this.sleep(140);
+
+    if (toText.length > 0) {
+      const typeSteps = Math.min(24, Math.max(6, Math.ceil(toText.length / 6)));
+      const typeChunk = Math.max(1, Math.ceil(toText.length / typeSteps));
+      let inserted = 0;
+      while (inserted < toText.length) {
+        const chunk = toText.slice(inserted, inserted + typeChunk);
+        const insertPos = editor.offsetToPos(startOffset + inserted);
+        editor.replaceRange(chunk, insertPos, insertPos);
+        inserted += chunk.length;
+        await this.sleep(RevisionBuddyPlugin.EDIT_SHOWCASE_TYPE_MS);
+      }
+      this.setFocusHighlight(toText);
+      await this.sleep(900);
+      this.setFocusHighlight(null);
+    }
+  }
+
   /**
    * Run the fast (nano) auto-fix model on the current editor selection (or current line).
    * Used by "Ask for quick revision" from suggestion-only findings.
    */
-  async runAutoFixOnSelection(suggestionHint?: string): Promise<void> {
+  async runAutoFixOnSelection(
+    suggestionHint?: string,
+    spanText?: string,
+    fallbackSearchText?: string,
+    showcaseEdit = false
+  ): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) {
       new Notice("Open a note and go to the text first");
       return;
     }
     const editor = view.editor;
-    let text = editor.getSelection();
+    let text = "";
     let replaceBySelection = true;
+    const fullText = editor.getValue();
+
+    const tryFindSpan = (): boolean => {
+      const candidates = [spanText, fallbackSearchText].filter((c): c is string => Boolean(c));
+      if (!candidates.length) return false;
+      for (const candidate of candidates) {
+        const idx = fullText.indexOf(candidate);
+        if (idx !== -1) {
+          const from = editor.offsetToPos(idx);
+          const to = editor.offsetToPos(idx + candidate.length);
+          editor.setSelection(from, to);
+          text = candidate;
+          replaceBySelection = true;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (!tryFindSpan()) {
+      text = editor.getSelection();
+      replaceBySelection = true;
+    }
     if (!text.trim()) {
       const cursor = editor.getCursor();
       const line = editor.getLine(cursor.line);
@@ -363,6 +449,14 @@ export default class RevisionBuddyPlugin extends Plugin {
       }
       text = line;
       replaceBySelection = false;
+    }
+    if (text.length === fullText.length) {
+      new Notice("Quick revision cancelled: selection spans the entire document.");
+      return;
+    }
+    if (text.length > 5000) {
+      new Notice("Quick revision cancelled: selection is too large. Select a smaller span.");
+      return;
     }
     const config = {
       provider: this.autoFixSettings.provider,
@@ -379,13 +473,27 @@ export default class RevisionBuddyPlugin extends Plugin {
     try {
       const res = await requestAutoFix(config, { text, suggestionHint: suggestionHint?.trim() || undefined });
       if (res.ok) {
+        if (res.from && res.from !== text) {
+          new Notice("Quick revision cancelled: model output did not match selected text.");
+          return;
+        }
         const toUse = res.to;
         if (replaceBySelection) {
-          editor.replaceSelection(toUse);
+          const from = editor.getCursor("from");
+          const to = editor.getCursor("to");
+          if (showcaseEdit) {
+            await this.playEditShowcase(editor, from, to, text, toUse);
+          } else {
+            editor.replaceSelection(toUse);
+          }
         } else {
           const from = { line: lineNum, ch: 0 };
           const to = { line: lineNum, ch: editor.getLine(lineNum).length };
-          editor.replaceRange(toUse, from, to);
+          if (showcaseEdit) {
+            await this.playEditShowcase(editor, from, to, text, toUse);
+          } else {
+            editor.replaceRange(toUse, from, to);
+          }
         }
         new Notice("Quick revision applied");
       } else {
@@ -483,15 +591,7 @@ export default class RevisionBuddyPlugin extends Plugin {
         if (pos !== -1) {
           const from = editor.offsetToPos(pos);
           const to = editor.offsetToPos(pos + fromStr.length);
-          editor.setSelection(from, to);
-          editor.scrollIntoView({ from, to }, true);
-          editor.replaceRange("", from, to);
-          const insertFrom = editor.offsetToPos(pos);
-          setTimeout(() => {
-            editor.replaceRange(toStr, insertFrom, insertFrom);
-            this.setFocusHighlight(toStr);
-            setTimeout(() => this.setFocusHighlight(null), 1200);
-          }, 180);
+          await this.playEditShowcase(editor, from, to, fromStr, toStr);
         }
       }
 
@@ -653,6 +753,23 @@ export default class RevisionBuddyPlugin extends Plugin {
         background-color: var(--interactive-accent);
         color: var(--text-on-accent);
         border-radius: 2px;
+        border: 2px solid var(--text-on-accent);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12), 0 0 10px rgba(0, 0, 0, 0.18);
+        animation: revision-buddy-pulse 0.9s ease-in-out 2;
+      }
+      @keyframes revision-buddy-pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.85;
+        }
+        50% {
+          transform: scale(1.02);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 0.9;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -686,4 +803,3 @@ export default class RevisionBuddyPlugin extends Plugin {
     }
   }
 }
-
