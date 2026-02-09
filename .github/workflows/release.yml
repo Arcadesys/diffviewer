@@ -26,10 +26,13 @@ jobs:
       - name: Build and create plugin zip
         run: npm run release:zip
 
-      - name: Create GitHub Release and upload plugin zip
+      - name: Create GitHub Release and upload plugin assets
         uses: softprops/action-gh-release@v2
         with:
-          files: revision-buddy-*.zip
+          files: |
+            release/main.js
+            release/manifest.json
+            revision-buddy-*.zip
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
