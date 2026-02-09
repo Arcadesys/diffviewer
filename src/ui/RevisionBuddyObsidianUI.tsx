@@ -46,6 +46,16 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "8px",
   },
+  /** List item when LLM said "good" / no revisions — distinct from items with edits. */
+  itemNoRevision: {
+    borderLeft: "4px solid var(--interactive-success, #30a14e)",
+    backgroundColor: "var(--background-secondary-alt, rgba(46, 160, 67, 0.08))",
+  },
+  noRevisionBadge: {
+    fontSize: "max(0.875rem, var(--font-ui-small))",
+    color: "var(--interactive-success, #30a14e)",
+    fontWeight: 600,
+  },
   comment: {
     fontSize: "max(1.0625rem, var(--font-ui-large))",
     color: "var(--text-normal)",
@@ -633,12 +643,14 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
           fetch('http://127.0.0.1:7246/ingest/96b8c0e4-6f21-4b34-aa7b-a6e041b19d43',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RevisionBuddyObsidianUI.tsx:findings.map',message:'finding meta and option state',data:{index,suggestionsLength:meta?.suggestions?.length ?? 0,patchOptionsLength:meta?.patchOptions?.length ?? 0,applyable,hasMultiplePatchOptions,onAcceptOptionDefined},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
           // #endregion
 
+          const isNoRevision = meta?.hasPatch === false;
           return (
             <li key={finding.id ?? index}>
               <div
                 style={{
                   ...styles.item,
                   ...(isExpanded ? styles.itemExpanded : {}),
+                  ...(isNoRevision ? styles.itemNoRevision : {}),
                 }}
                 onClick={() => setExpandedIndex(isExpanded ? null : index)}
               >
@@ -662,7 +674,8 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                     {meta?.agent_id && <span>{meta.agent_id}</span>}
                     {finding.severity && <span>{finding.severity}</span>}
                     {status && <span>{status}</span>}
-                    {!applyable && !status && <span>Suggestion only</span>}
+                    {isNoRevision && <span style={styles.noRevisionBadge}>No changes needed</span>}
+                    {!applyable && !status && !isNoRevision && <span>Suggestion only</span>}
                   </div>
                 </div>
                 {isExpanded && (
@@ -777,6 +790,7 @@ function FindingDetail({
 }) {
   const comment = showFull ? finding.comment : finding.comment.slice(0, 300) + (finding.comment.length > 300 ? "…" : "");
   const applyable = meta?.hasPatch !== false;
+  const isNoRevision = meta?.hasPatch === false;
   const hasMultipleOptions = meta?.patchOptions && meta.patchOptions.length > 1;
   const showSingleAccept = applyable && !hasMultipleOptions;
   // #region agent log
@@ -784,6 +798,11 @@ function FindingDetail({
   // #endregion
   return (
     <>
+      {isNoRevision && (
+        <div style={{ ...styles.metaLabel, color: "var(--interactive-success, #30a14e)", marginBottom: "6px", fontWeight: 600 }}>
+          No edits suggested — this part was approved as-is.
+        </div>
+      )}
       <div style={styles.comment}>{comment}</div>
       {meta?.rationale && (
         <>
