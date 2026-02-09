@@ -473,7 +473,7 @@ export default class RevisionBuddyPlugin extends Plugin {
     try {
       const res = await requestAutoFix(config, { text, suggestionHint: suggestionHint?.trim() || undefined });
       if (res.ok) {
-        if (res.from && res.from !== text) {
+        if (res.from !== text) {
           new Notice("Quick revision cancelled: model output did not match selected text.");
           return;
         }
