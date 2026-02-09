@@ -633,7 +633,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
           const isExpanded = expandedIndex === index;
           const meta = findingMeta?.[index];
           const acceptedOptionIndex = acceptedOptionByIndex[index];
-          const status = isAccepted ? (acceptedOptionIndex !== undefined && meta?.patchOptions ? `Accepted: ${meta.patchOptions[acceptedOptionIndex]?.label ?? "Option"}` : "Accepted") : isIgnored ? "Ignored" : null;
+          const status = isAccepted ? (acceptedOptionIndex !== undefined && meta?.patchOptions ? `Accepted: ${meta.patchOptions[acceptedOptionIndex]?.label ?? "Option"}` : "Accepted") : isIgnored ? "Complete" : null;
           const label =
             status || finding.comment.split("\n")[0]?.slice(0, 60) || `Finding ${index + 1}`;
           const applyable = meta?.hasPatch !== false;
@@ -896,7 +896,7 @@ function FindingDetail({
           onClick={onIgnore}
           disabled={disabledIgnore}
         >
-          Ignore
+          Mark complete
         </button>
         {!showFull && (
           <button
