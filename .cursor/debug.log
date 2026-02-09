@@ -2713,3 +2713,6 @@
 {"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":true},"timestamp":1770608059037,"hypothesisId":"H2,H4"}
 {"location":"RevisionBuddyObsidianUI.tsx:FindingDetail","message":"detail render","data":{"index":0,"applyable":false,"suggestionsLength":2,"patchOptionsLength":0,"disabledAccept":true,"showSingleAccept":false},"timestamp":1770608059051,"hypothesisId":"H2"}
 {"location":"RevisionBuddyObsidianUI.tsx:FindingDetail","message":"detail render","data":{"index":0,"applyable":false,"suggestionsLength":2,"patchOptionsLength":0,"disabledAccept":true,"showSingleAccept":false},"timestamp":1770608059051,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:entry","message":"RevisionBuddyView.onOpen started","data":{},"timestamp":1770608114876,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterGetInitial","message":"getInitialTextAndKey result","data":{"persistKey":"","initialTextLen":0},"timestamp":1770608114878,"hypothesisId":"H2"}
+{"location":"main.ts:onOpen:afterPersisted","message":"getPersistedState done","data":{"hasPersisted":false},"timestamp":1770608114878,"hypothesisId":"H2,H4"}
