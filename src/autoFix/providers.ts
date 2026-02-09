@@ -1,11 +1,11 @@
-import type { QuickFixConfig, QuickFixRequest, QuickFixResponse } from "./types";
+import type { AutoFixConfig, AutoFixRequest, AutoFixResponse } from "./types";
 
-const QUICK_FIX_SYSTEM = `You are a line-level editor. Given a line or short selection from a document, suggest exactly one minimal edit.
+const AUTO_FIX_SYSTEM = `You are a line-level editor. Given a line or short selection from a document, suggest exactly one minimal edit.
 Output only a single JSON object with two keys: "from" (the exact original text) and "to" (the improved text).
 Rules: only fix grammar, clarity, or style; do not change meaning. Keep the edit minimal. Preserve formatting and line breaks.
 If the text needs no change, set "to" equal to "from".`;
 
-function buildUserMessage(req: QuickFixRequest): string {
+function buildUserMessage(req: AutoFixRequest): string {
   const parts: string[] = [];
   if (req.contextBefore) {
     parts.push("Context before:\n" + req.contextBefore);
@@ -17,7 +17,7 @@ function buildUserMessage(req: QuickFixRequest): string {
   return parts.join("\n\n");
 }
 
-function parseJsonFromResponse(raw: string): QuickFixResponse {
+function parseJsonFromResponse(raw: string): AutoFixResponse {
   raw = raw.trim();
   // Allow markdown code block
   const codeMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -34,10 +34,10 @@ function parseJsonFromResponse(raw: string): QuickFixResponse {
   return { ok: true, from: obj.from, to: obj.to };
 }
 
-export async function quickFixOpenAI(
-  config: QuickFixConfig,
-  req: QuickFixRequest
-): Promise<QuickFixResponse> {
+export async function autoFixOpenAI(
+  config: AutoFixConfig,
+  req: AutoFixRequest
+): Promise<AutoFixResponse> {
   if (config.provider !== "openai" || !config.apiKey) {
     return { ok: false, reason: "OpenAI provider requires an API key" };
   }
@@ -45,7 +45,7 @@ export async function quickFixOpenAI(
   const body = {
     model: config.model || "gpt-4o-mini",
     messages: [
-      { role: "system", content: QUICK_FIX_SYSTEM },
+      { role: "system", content: AUTO_FIX_SYSTEM },
       { role: "user", content: buildUserMessage(req) },
     ],
     max_tokens: 256,
@@ -77,16 +77,16 @@ export async function quickFixOpenAI(
   return parseJsonFromResponse(content);
 }
 
-export async function quickFixGoogle(
-  config: QuickFixConfig,
-  req: QuickFixRequest
-): Promise<QuickFixResponse> {
+export async function autoFixGoogle(
+  config: AutoFixConfig,
+  req: AutoFixRequest
+): Promise<AutoFixResponse> {
   if (config.provider !== "google" || !config.apiKey) {
     return { ok: false, reason: "Google provider requires an API key" };
   }
   const modelId = (config.model || "gemini-2.0-flash").replace(/^models\//, "");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
-  const prompt = QUICK_FIX_SYSTEM + "\n\n" + buildUserMessage(req);
+  const prompt = AUTO_FIX_SYSTEM + "\n\n" + buildUserMessage(req);
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
@@ -117,18 +117,18 @@ export async function quickFixGoogle(
   return parseJsonFromResponse(text);
 }
 
-export async function requestQuickFix(
-  config: QuickFixConfig,
-  req: QuickFixRequest
-): Promise<QuickFixResponse> {
+export async function requestAutoFix(
+  config: AutoFixConfig,
+  req: AutoFixRequest
+): Promise<AutoFixResponse> {
   if (!config.apiKey?.trim()) {
     return { ok: false, reason: "API key not set" };
   }
   switch (config.provider) {
     case "openai":
-      return quickFixOpenAI(config, req);
+      return autoFixOpenAI(config, req);
     case "google":
-      return quickFixGoogle(config, req);
+      return autoFixGoogle(config, req);
     default:
       return { ok: false, reason: `Unknown provider: ${config.provider}` };
   }

@@ -4,12 +4,12 @@ import { StrictMode, createElement } from "react";
 import { App } from "./src/ui/App";
 import type { PersistedSessionState } from "./src/types";
 import {
-  loadQuickFixSettings,
+  loadAutoFixSettings,
   RevisionBuddySettingTab,
-  type QuickFixSettings,
-  DEFAULT_QUICK_FIX_SETTINGS,
+  type AutoFixSettings,
+  DEFAULT_AUTO_FIX_SETTINGS,
 } from "./src/settings";
-import { requestQuickFix } from "./src/quickFix";
+import { requestAutoFix } from "./src/autoFix";
 
 /** Minimal type for Obsidian editor's CodeMirror view — used only to read doc and coords (no CM bundle). */
 interface EditorCM {
@@ -293,8 +293,8 @@ export default class RevisionBuddyPlugin extends Plugin {
   private resizeDebounceId: ReturnType<typeof setTimeout> | null = null;
   private static readonly RESIZE_DEBOUNCE_MS = 80;
 
-  /** Fast, cheap LLM layer for line-level quick fix. */
-  private quickFixSettings: QuickFixSettings = { ...DEFAULT_QUICK_FIX_SETTINGS };
+  /** Fast, cheap LLM layer for line-level auto-fix. */
+  private autoFixSettings: AutoFixSettings = { ...DEFAULT_AUTO_FIX_SETTINGS };
 
   getHighlightState(): { path: string | null; spans: string[]; focusSpan: string | null } {
     return { path: this.highlightPath, spans: this.highlightSpans, focusSpan: this.focusHighlightSpan };
@@ -351,7 +351,7 @@ export default class RevisionBuddyPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
-    this.quickFixSettings = await loadQuickFixSettings(this.loadData.bind(this));
+    this.autoFixSettings = await loadAutoFixSettings(this.loadData.bind(this));
     this.registerView(REVISION_BUDDY_VIEW_TYPE, (leaf) => new RevisionBuddyView(leaf, this));
     this.addStyles();
     this.resizeHandler = () => this.onResize();
@@ -359,8 +359,8 @@ export default class RevisionBuddyPlugin extends Plugin {
     this.addSettingTab(
       new RevisionBuddySettingTab(
         this as Plugin & { loadData: () => Promise<Record<string, unknown> | undefined>; saveData: (data: unknown) => Promise<void> },
-        () => this.quickFixSettings,
-        (s) => { this.quickFixSettings = s; }
+        () => this.autoFixSettings,
+        (s) => { this.autoFixSettings = s; }
       )
     );
     this.addCommand({
@@ -384,8 +384,8 @@ export default class RevisionBuddyPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "quick-fix-selection",
-      name: "Quick fix selection (fast LLM)",
+      id: "auto-fix-selection",
+      name: "Auto-fix selection",
       editorCallback: (editor, view) => {
         let text = editor.getSelection();
         let replaceBySelection = true; // if false, we'll use replaceRange for the current line
@@ -400,18 +400,18 @@ export default class RevisionBuddyPlugin extends Plugin {
           replaceBySelection = false;
         }
         const config = {
-          provider: this.quickFixSettings.provider,
-          apiKey: this.quickFixSettings.apiKey,
-          model: this.quickFixSettings.model || (this.quickFixSettings.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash"),
+          provider: this.autoFixSettings.provider,
+          apiKey: this.autoFixSettings.apiKey,
+          model: this.autoFixSettings.model || (this.autoFixSettings.provider === "openai" ? "gpt-4o-mini" : "gemini-2.0-flash"),
         };
         if (!config.apiKey.trim()) {
-          new Notice("Set Quick fix API key in Settings → Revision Buddy");
+          new Notice("Set Auto-fix API key in Settings → Revision Buddy");
           return;
         }
-        new Notice("Quick fix…");
+        new Notice("Auto-fix…");
         const cursor = editor.getCursor();
         const lineNum = cursor.line;
-        requestQuickFix(config, { text })
+        requestAutoFix(config, { text })
           .then((res) => {
             if (res.ok) {
               const toUse = res.to;
@@ -422,7 +422,7 @@ export default class RevisionBuddyPlugin extends Plugin {
                 const to = { line: lineNum, ch: editor.getLine(lineNum).length };
                 editor.replaceRange(toUse, from, to);
               }
-              new Notice("Quick fix applied");
+              new Notice("Auto-fix applied");
             } else {
               new Notice(res.reason);
             }
