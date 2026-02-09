@@ -123,6 +123,8 @@ export interface PersistedSessionState {
   ignoredIndices: number[];
   /** For multi-option findings: finding index -> chosen option index. Persist as string-keyed record. */
   acceptedOptionByIndex?: Record<string, number>;
+  /** Indices of findings where user applied a suggestion (Option A/B) to the document. */
+  appliedSuggestionIndices?: number[];
   /** Index of the finding currently shown in single-comment view. */
   selectedFindingIndex?: number;
 }

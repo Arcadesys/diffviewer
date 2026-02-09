@@ -273,6 +273,17 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     overflowY: "auto",
   },
+  /** Applied to the finding card when this edit is completed (Accepted, Mark complete, or Apply to document). */
+  singleFindingCardCompleted: {
+    borderLeft: "4px solid var(--interactive-success, #30a14e)",
+    backgroundColor: "var(--background-secondary-alt, rgba(46, 160, 67, 0.08))",
+  },
+  completedBadge: {
+    fontSize: "max(0.875rem, var(--font-ui-small))",
+    color: "var(--interactive-success, #30a14e)",
+    fontWeight: 600,
+    marginBottom: "4px",
+  },
   navRow: {
     display: "flex",
     alignItems: "center",
@@ -326,6 +337,8 @@ export interface RevisionBuddyObsidianUIProps {
   initialIgnoredIndices?: number[];
   /** Persisted: finding index -> option index (string keys from JSON). */
   initialAcceptedOptionByIndex?: Record<string, number>;
+  /** Persisted: indices of findings where user applied Option A/B to the document. */
+  initialAppliedSuggestionIndices?: number[];
   /** Persisted: index of the finding shown in single-comment view. */
   initialSelectedFindingIndex?: number;
   rawJson: string;
@@ -336,8 +349,8 @@ export interface RevisionBuddyObsidianUIProps {
   onHighlightInSource?: (span: string | null) => void;
   /** When present, suggestion-only findings show "Ask for quick revision" (jump + nano model). */
   onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
-  /** Apply a suggestion to the source file (Option A / B from suggestions array). */
-  onApplySuggestion?: (spanText: string, replacementText: string) => void | Promise<void>;
+  /** Apply a suggestion (Option A/B). Pass editJson to send edit + original text to LLM. Returns Promise<boolean>. */
+  onApplySuggestion?: (spanText: string, replacementText: string, editJson?: import("../autoFix").ApplySuggestionEditJson) => void | Promise<boolean>;
 }
 
 function getAllAcceptedIndices(acceptedIndices: Set<number>, acceptedOptionByIndex: Record<number, number>): Set<number> {
@@ -411,6 +424,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     initialAcceptedIndices,
     initialIgnoredIndices,
     initialAcceptedOptionByIndex,
+    initialAppliedSuggestionIndices,
     initialSelectedFindingIndex,
     rawJson,
     onPersistState,
@@ -434,6 +448,9 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     }
     return out;
   });
+  const [appliedSuggestionIndices, setAppliedSuggestionIndices] = useState<Set<number>>(() =>
+    new Set(Array.isArray(initialAppliedSuggestionIndices) ? initialAppliedSuggestionIndices : [])
+  );
   const [selectedFindingIndex, setSelectedFindingIndex] = useState<number>(() => {
     const n = findings.length;
     if (n === 0) return 0;
@@ -477,10 +494,11 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         acceptedIndices: Array.from(acceptedIndices),
         ignoredIndices: Array.from(ignoredIndices),
         acceptedOptionByIndex: Object.keys(acceptedOptionByIndexForPersist).length > 0 ? acceptedOptionByIndexForPersist : undefined,
+        appliedSuggestionIndices: appliedSuggestionIndices.size > 0 ? Array.from(appliedSuggestionIndices) : undefined,
         selectedFindingIndex,
       });
     }
-  }, [rawJson, acceptedIndices, ignoredIndices, acceptedOptionByIndex, selectedFindingIndex, onPersistState]);
+  }, [rawJson, acceptedIndices, ignoredIndices, acceptedOptionByIndex, appliedSuggestionIndices, selectedFindingIndex, onPersistState]);
 
   const showToast = useCallback(
     (msg: string) => {
@@ -501,6 +519,15 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
       return true;
     },
     [findingMeta]
+  );
+
+  const isFindingCompleted = useCallback(
+    (index: number) =>
+      acceptedIndices.has(index) ||
+      ignoredIndices.has(index) ||
+      appliedSuggestionIndices.has(index) ||
+      acceptedOptionByIndex[index] !== undefined,
+    [acceptedIndices, ignoredIndices, appliedSuggestionIndices, acceptedOptionByIndex]
   );
 
   const handleAccept = useCallback(
@@ -758,6 +785,10 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                 </button>
                 <span style={styles.navLabel} aria-live="polite">
                   {selectedFindingIndex + 1} of {findings.length}
+                  <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
+                    {" "}
+                    ({findings.filter((_, i) => isFindingCompleted(i)).length} completed)
+                  </span>
                 </span>
                 <button
                   type="button"
@@ -770,7 +801,17 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                 </button>
               </div>
               {currentFinding && (
-                <div style={styles.singleFindingCard}>
+                <div
+                  style={{
+                    ...styles.singleFindingCard,
+                    ...(isFindingCompleted(selectedFindingIndex) ? styles.singleFindingCardCompleted : {}),
+                  }}
+                >
+                  {isFindingCompleted(selectedFindingIndex) && (
+                    <div style={styles.completedBadge} aria-hidden="true">
+                      Completed
+                    </div>
+                  )}
                   <FindingDetail
                     finding={currentFinding}
                     index={selectedFindingIndex}
@@ -812,16 +853,36 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
                         : undefined
                     }
                     onApplySuggestion={
-                      onApplySuggestion && !canAcceptFinding(selectedFindingIndex)
-                        ? (replacementText: string) => {
-                            const spanText = currentFinding.patch.span ?? currentFinding.patch.from;
-                            onApplySuggestion(spanText, replacementText);
+                      onApplySuggestion &&
+                      !isFindingCompleted(selectedFindingIndex) &&
+                      !canAcceptFinding(selectedFindingIndex) &&
+                      (currentFinding.patch.span ?? currentFinding.patch.from)?.trim()
+                        ? (replacementText: string, optionIndex?: number) => {
+                            const spanText = (currentFinding.patch.span ?? currentFinding.patch.from)?.trim() ?? "";
+                            const optionLabel = ["Option A", "Option B", "Option C", "Option D", "Option E"][optionIndex ?? 0] ?? `Option ${(optionIndex ?? 0) + 1}`;
+                            const editJson = {
+                              comment: currentFinding.comment,
+                              patch: {
+                                from: currentFinding.patch.from,
+                                to: currentFinding.patch.to,
+                                span: currentFinding.patch.span,
+                              },
+                              optionLabel,
+                              replacementText,
+                            };
+                            const result = onApplySuggestion(spanText, replacementText, editJson);
+                            if (result != null && typeof (result as Promise<boolean>).then === "function") {
+                              (result as Promise<boolean>).then((ok) => {
+                                if (ok) setAppliedSuggestionIndices((prev) => new Set(prev).add(selectedFindingIndex));
+                              });
+                            }
                           }
                         : undefined
                     }
                     disabledAccept={
                       acceptedIndices.has(selectedFindingIndex) ||
                       ignoredIndices.has(selectedFindingIndex) ||
+                      appliedSuggestionIndices.has(selectedFindingIndex) ||
                       acceptedOptionByIndex[selectedFindingIndex] !== undefined ||
                       !canAcceptFinding(selectedFindingIndex)
                     }
@@ -866,7 +927,7 @@ function FindingDetail({
   onOpenModal: () => void;
   onJumpToInSource?: () => void;
   onQuickRevision?: () => void;
-  onApplySuggestion?: (replacementText: string) => void;
+  onApplySuggestion?: (replacementText: string, optionIndex?: number) => void | Promise<boolean>;
   disabledAccept: boolean;
   disabledIgnore: boolean;
   showFull?: boolean;
@@ -914,7 +975,7 @@ function FindingDetail({
                       <button
                         type="button"
                         style={{ ...styles.btn, ...styles.btnAccept }}
-                        onClick={() => onApplySuggestion(text)}
+                        onClick={() => onApplySuggestion(text, optIdx)}
                         aria-label={label}
                       >
                         {label}

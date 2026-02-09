@@ -35,3 +35,27 @@ export interface AutoFixError {
 }
 
 export type AutoFixResponse = AutoFixResult | AutoFixError;
+
+// --- Apply suggestion with LLM (Option A/B: send edit JSON + original text, get structured JSON back) ---
+
+/** Edit context sent to the LLM when applying Option A/B. */
+export interface ApplySuggestionEditJson {
+  comment: string;
+  patch: { from: string; to: string; span?: string };
+  optionLabel: string;
+  replacementText: string;
+}
+
+export interface ApplySuggestionLLMRequest {
+  editJson: ApplySuggestionEditJson;
+  originalText: string;
+}
+
+/** Expected structured JSON from the LLM: exact span to replace and final replacement text. */
+export interface ApplySuggestionLLMResult {
+  ok: true;
+  from: string;
+  to: string;
+}
+
+export type ApplySuggestionLLMResponse = ApplySuggestionLLMResult | AutoFixError;

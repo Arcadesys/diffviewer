@@ -73,8 +73,8 @@ export interface AppProps {
   onSessionChange?: (path: string, spans: string[]) => void;
   /** Jump to span in document and run fast (nano) model for a quick revision; used for suggestion-only findings. */
   onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
-  /** Apply a suggestion as replacement in the source file (Option A / B from suggestions array). */
-  onApplySuggestion?: (spanText: string, replacementText: string) => void | Promise<void>;
+  /** Apply a suggestion (Option A/B). Optional editJson + original text are sent to LLM; returns Promise<boolean>. */
+  onApplySuggestion?: (spanText: string, replacementText: string, editJson?: import("../autoFix").ApplySuggestionEditJson) => void | Promise<boolean>;
 }
 
 export function App(props: AppProps) {
@@ -148,6 +148,7 @@ export function App(props: AppProps) {
           initialAcceptedIndices={persistedState?.acceptedIndices}
           initialIgnoredIndices={persistedState?.ignoredIndices}
           initialAcceptedOptionByIndex={persistedState?.acceptedOptionByIndex}
+          initialAppliedSuggestionIndices={persistedState?.appliedSuggestionIndices}
           initialSelectedFindingIndex={persistedState?.selectedFindingIndex}
           rawJson={rawJson}
           onPersistState={onPersistState}

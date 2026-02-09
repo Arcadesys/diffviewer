@@ -9,7 +9,7 @@ import {
   type AutoFixSettings,
   DEFAULT_AUTO_FIX_SETTINGS,
 } from "./src/settings";
-import { requestAutoFix } from "./src/autoFix";
+import { requestAutoFix, requestApplySuggestionLLM, type ApplySuggestionEditJson } from "./src/autoFix";
 import { applyPatch } from "./src/patchApply";
 
 /** Minimal type for Obsidian editor's CodeMirror view — used only to read doc and coords (no CM bundle). */
@@ -268,8 +268,8 @@ class RevisionBuddyView extends ItemView {
             this.jumpToInSource(spanText, fallbackSearchText);
             setTimeout(() => this.plugin.runAutoFixOnSelection(suggestionContext), 400);
           },
-          onApplySuggestion: (spanText: string, replacementText: string) =>
-            this.plugin.applySuggestionToSource(persistKey, spanText, replacementText),
+          onApplySuggestion: (spanText: string, replacementText: string, editJson?: ApplySuggestionEditJson) =>
+            this.plugin.applySuggestionToSource(persistKey, spanText, replacementText, editJson),
         })
       )
     );
@@ -407,49 +407,83 @@ export default class RevisionBuddyPlugin extends Plugin {
   }
 
   /**
-   * Apply a suggestion as a replacement in the source file: find spanText, replace with replacementText.
-   * Uses same single-occurrence rule as patchApply. Returns true if applied.
-   * When the file is open, plays a short "delete then retype" animation so the edit is visible.
+   * Apply a suggestion as a replacement in the source file.
+   * When editJson is provided and API key is set, sends edit JSON + original text to the LLM and uses the returned structured JSON (from/to).
+   * Otherwise applies spanText → replacementText directly.
+   * Returns true if applied. When the file is open, plays a short "delete then retype" animation.
    */
-  async applySuggestionToSource(filePath: string, spanText: string, replacementText: string): Promise<boolean> {
-    if (!filePath?.trim() || !spanText) {
-      new Notice("No file or span to apply");
+  async applySuggestionToSource(
+    filePath: string,
+    spanText: string,
+    replacementText: string,
+    editJson?: ApplySuggestionEditJson
+  ): Promise<boolean> {
+    if (!spanText?.trim()) {
+      new Notice("No text to replace for this suggestion. Use \"Go to in document\" then \"Ask for quick revision\".");
       return false;
     }
-    const file = this.app.vault.getFileByPath(filePath);
+    let targetPath = filePath?.trim();
+    if (!targetPath) {
+      const active = this.app.workspace.getActiveFile();
+      if (active?.extension === "md") targetPath = active.path;
+    }
+    if (!targetPath) {
+      new Notice("No note to apply to. Open the note in the editor first.");
+      return false;
+    }
+    const file = this.app.vault.getFileByPath(targetPath);
     if (!file) {
-      new Notice("Source file not found");
+      new Notice("Source file not found. The note may have been moved or renamed.");
       return false;
     }
     try {
       const text = await this.app.vault.read(file);
+      let fromStr = spanText;
+      let toStr = replacementText;
+
+      if (editJson && this.autoFixSettings.apiKey?.trim()) {
+        new Notice("Sending to LLM…");
+        const llmRes = await requestApplySuggestionLLM(
+          {
+            provider: this.autoFixSettings.provider,
+            apiKey: this.autoFixSettings.apiKey,
+            model: this.autoFixSettings.model || (this.autoFixSettings.provider === "openai" ? "gpt-5-nano" : "gemini-2.0-flash"),
+          },
+          { editJson, originalText: text }
+        );
+        if (llmRes.ok) {
+          fromStr = llmRes.from;
+          toStr = llmRes.to;
+        } else {
+          new Notice(llmRes.reason + " — applying suggestion directly.");
+        }
+      }
+
       const result = applyPatch(text, {
-        from: spanText,
-        to: replacementText,
-        span: spanText,
+        from: fromStr,
+        to: toStr,
+        span: fromStr,
       });
       if (!result.ok) {
         new Notice(result.reason);
         return false;
       }
 
-      const view = this.getMarkdownViewForPath(filePath);
+      const view = this.getMarkdownViewForPath(targetPath);
       if (view) {
         const editor = view.editor;
         const content = editor.getValue();
-        const pos = content.indexOf(spanText);
+        const pos = content.indexOf(fromStr);
         if (pos !== -1) {
           const from = editor.offsetToPos(pos);
-          const to = editor.offsetToPos(pos + spanText.length);
+          const to = editor.offsetToPos(pos + fromStr.length);
           editor.setSelection(from, to);
           editor.scrollIntoView({ from, to }, true);
-          // Delete-then-retype animation so the user sees the edit happen
           editor.replaceRange("", from, to);
           const insertFrom = editor.offsetToPos(pos);
           setTimeout(() => {
-            editor.replaceRange(replacementText, insertFrom, insertFrom);
-            // Brief focus highlight on the new text so it's obvious what changed
-            this.setFocusHighlight(replacementText);
+            editor.replaceRange(toStr, insertFrom, insertFrom);
+            this.setFocusHighlight(toStr);
             setTimeout(() => this.setFocusHighlight(null), 1200);
           }, 180);
         }
