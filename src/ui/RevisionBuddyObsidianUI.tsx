@@ -100,6 +100,10 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "var(--interactive-accent)",
     color: "var(--text-on-accent)",
   },
+  btnRestart: {
+    backgroundColor: "var(--background-modifier-border)",
+    color: "var(--text-normal)",
+  },
   overlay: {
     position: "fixed",
     inset: 0,
@@ -351,6 +355,8 @@ export interface RevisionBuddyObsidianUIProps {
   onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
   /** Apply a suggestion (Option A/B). Pass editJson to send edit + original text to LLM. Returns Promise<boolean>. */
   onApplySuggestion?: (spanText: string, replacementText: string, editJson?: import("../autoFix").ApplySuggestionEditJson) => void | Promise<boolean>;
+  /** Clear the persisted session JSON and state for the current file (restart). */
+  onRestart?: () => void | Promise<void>;
 }
 
 function getAllAcceptedIndices(acceptedIndices: Set<number>, acceptedOptionByIndex: Record<number, number>): Set<number> {
@@ -434,6 +440,7 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     onHighlightInSource,
     onQuickRevision,
     onApplySuggestion,
+    onRestart,
   } = props;
   const findings = session.findings;
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(() => new Set(initialAcceptedIndices ?? []));
@@ -585,6 +592,14 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
     );
   }, [currentText, onExportText, showToast]);
 
+  const handleRestart = useCallback(() => {
+    const run = async () => {
+      await onRestart?.();
+      showToast("Session cleared; paste new JSON to start over");
+    };
+    run();
+  }, [onRestart, showToast]);
+
   const currentFinding = findings[selectedFindingIndex] ?? null;
 
   return (
@@ -593,6 +608,11 @@ export function RevisionBuddyObsidianUI(props: RevisionBuddyObsidianUIProps) {
         <button type="button" style={{ ...styles.btn, ...styles.btnCopy }} onClick={handleCopyText}>
           Copy text
         </button>
+        {onRestart && (
+          <button type="button" style={{ ...styles.btn, ...styles.btnRestart }} onClick={handleRestart}>
+            Restart
+          </button>
+        )}
       </div>
 
       {toastMessage && (

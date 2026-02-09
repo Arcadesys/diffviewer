@@ -250,11 +250,16 @@ class RevisionBuddyView extends ItemView {
 
   private renderApp(initialText: string, persistKey: string, persisted: PersistedSessionState | null): void {
     if (!this.root) return;
+    const handleRestart = async () => {
+      await this.plugin.clearPersistedState(persistKey);
+      this.renderApp(initialText, persistKey, null);
+    };
     this.root.render(
       createElement(
         StrictMode,
         null,
         createElement(App, {
+          key: `${persistKey}-${persisted ? "loaded" : "empty"}`,
           initialText,
           persistKey,
           persistedState: persisted,
@@ -270,6 +275,7 @@ class RevisionBuddyView extends ItemView {
           },
           onApplySuggestion: (spanText: string, replacementText: string, editJson?: ApplySuggestionEditJson) =>
             this.plugin.applySuggestionToSource(persistKey, spanText, replacementText, editJson),
+          onRestart: handleRestart,
         })
       )
     );
@@ -514,6 +520,15 @@ export default class RevisionBuddyPlugin extends Plugin {
     const map = (data && typeof data === "object" && data[PERSISTED_STATE_KEY]) as Record<string, PersistedSessionState> | undefined ?? {};
     const next = { ...map, [persistKey]: state };
     await this.saveData({ ...(typeof data === "object" && data !== null ? data : {}), [PERSISTED_STATE_KEY]: next });
+  }
+
+  /** Clears the persisted session state for a given file (wipes the JSON and all accept/ignore state). */
+  async clearPersistedState(persistKey: string): Promise<void> {
+    if (!persistKey) return;
+    const data = (await this.loadData()) as Record<string, unknown> | undefined;
+    const map = (data && typeof data === "object" && data[PERSISTED_STATE_KEY]) as Record<string, PersistedSessionState> | undefined ?? {};
+    const { [persistKey]: _, ...rest } = map;
+    await this.saveData({ ...(typeof data === "object" && data !== null ? data : {}), [PERSISTED_STATE_KEY]: rest });
   }
 
   async onload(): Promise<void> {

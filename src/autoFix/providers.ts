@@ -57,7 +57,7 @@ export async function autoFixOpenAI(
       { role: "system", content: AUTO_FIX_SYSTEM },
       { role: "user", content: buildUserMessage(req) },
     ],
-    max_tokens: 256,
+    max_completion_tokens: 256,
     temperature: 0.2,
   };
   const res = await fetch(url, {
@@ -198,7 +198,7 @@ export async function applySuggestionLLMOpenAI(
       { role: "system", content: APPLY_SUGGESTION_SYSTEM },
       { role: "user", content: buildApplySuggestionUserMessage(req) },
     ],
-    max_tokens: 1024,
+    max_completion_tokens: 1024,
     temperature: 0.2,
   };
   const res = await fetch(url, {

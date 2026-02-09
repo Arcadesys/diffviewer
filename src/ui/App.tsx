@@ -75,10 +75,12 @@ export interface AppProps {
   onQuickRevision?: (spanText: string, fallbackSearchText?: string, suggestionContext?: string) => void;
   /** Apply a suggestion (Option A/B). Optional editJson + original text are sent to LLM; returns Promise<boolean>. */
   onApplySuggestion?: (spanText: string, replacementText: string, editJson?: import("../autoFix").ApplySuggestionEditJson) => void | Promise<boolean>;
+  /** Clear the persisted session JSON and state for the current file (restart). */
+  onRestart?: () => void | Promise<void>;
 }
 
 export function App(props: AppProps) {
-  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onHighlightInSource, onSessionChange, onQuickRevision, onApplySuggestion } = props;
+  const { initialText, persistKey, persistedState, onPersistState, onExportText, onToast, onJumpToInSource, onHighlightInSource, onSessionChange, onQuickRevision, onApplySuggestion, onRestart } = props;
   const [rawJson, setRawJson] = useState(persistedState?.rawJson ?? "");
   const [parseResult, setParseResult] = useState<ParseSessionResult | null>(null);
 
@@ -158,6 +160,7 @@ export function App(props: AppProps) {
           onHighlightInSource={onHighlightInSource}
           onQuickRevision={onQuickRevision}
           onApplySuggestion={onApplySuggestion}
+          onRestart={onRestart}
         />
       )}
     </div>
